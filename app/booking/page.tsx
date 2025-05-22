@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { format, differenceInDays } from 'date-fns';
 import { Button } from '@/app/components/ui/button';
@@ -12,7 +12,7 @@ import Link from 'next/link';
 // In production, you would use an environment variable
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'pk_test_your_test_key');
 
-export default function BookingPage() {
+function BookingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
@@ -250,12 +250,12 @@ export default function BookingPage() {
                         Processing...
                       </>
                     ) : (
-                      'Proceed to Payment'
+                      'Proceed to Checkout'
                     )}
                   </Button>
 
-                  <p className="text-xs text-gray-600 mt-2 text-center">
-                    You will be redirected to Stripe to complete your payment securely.
+                  <p className="text-xs text-gray-500 mt-4 text-center">
+                    You'll be redirected to our secure payment provider to complete your booking.
                   </p>
                 </div>
               </div>
@@ -264,5 +264,22 @@ export default function BookingPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function BookingPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 pt-20">
+        <div className="container mx-auto px-4 py-8">
+          <div className="text-center py-12">
+            <div className="animate-spin h-8 w-8 border-4 border-red-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+            <p>Loading booking details...</p>
+          </div>
+        </div>
+      </div>
+    }>
+      <BookingContent />
+    </Suspense>
   );
 }

@@ -1,0 +1,17 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="16" cy="16" r="16" fill="#E82127"/>
+  
+  <!-- Stylized Tesla car silhouette (simplified) -->
+  <path d="M26 16.5C26 17.8807 25.4404 19.1705 24.4246 20.0963C23.4088 21.0222 22.0067 21.5 20.5 21.5H11.5C9.99332 21.5 8.59122 21.0222 7.57538 20.0963C6.55954 19.1705 6 17.8807 6 16.5C6 15.1193 6.55954 13.8295 7.57538 12.9037C8.59122 11.9778 9.99332 11.5 11.5 11.5H20.5C22.0067 11.5 23.4088 11.9778 24.4246 12.9037C25.4404 13.8295 26 15.1193 26 16.5Z" fill="white"/>
+  
+  <!-- Car window -->
+  <path d="M21 16.5C21 17.3284 20.5523 18 20 18H12C11.4477 18 11 17.3284 11 16.5C11 15.6716 11.4477 15 12 15H20C20.5523 15 21 15.6716 21 16.5Z" fill="#E82127"/>
+  
+  <!-- Wheels -->
+  <circle cx="10" cy="19" r="2" fill="#333333"/>
+  <circle cx="22" cy="19" r="2" fill="#333333"/>
+  
+  <!-- Calendar/booking indicator -->
+  <rect x="14" y="8" width="4" height="4" rx="1" stroke="white" stroke-width="1.5" fill="none"/>
+</svg>
