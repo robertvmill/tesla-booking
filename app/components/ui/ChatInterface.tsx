@@ -40,14 +40,11 @@ export function ChatInterface({ bookingId }: ChatInterfaceProps) {
   
   // Fetch messages
   const fetchMessages = async () => {
-    console.log('Fetching messages for booking:', bookingId);
     try {
       const response = await fetch(`/api/bookings/${bookingId}/messages`);
-      console.log('Messages response status:', response.status);
       
       if (response.ok) {
         const data = await response.json();
-        console.log('Messages data:', data);
         setMessages(data.messages);
         
         // Mark messages as read when they are viewed
@@ -64,8 +61,7 @@ export function ChatInterface({ bookingId }: ChatInterfaceProps) {
         // Scroll to bottom after messages load
         setTimeout(scrollToBottom, 100);
       } else {
-        const errorData = await response.text();
-        console.error('Failed to fetch messages:', response.status, errorData);
+        console.error('Failed to fetch messages:', response.status);
       }
     } catch (error) {
       console.error('Error fetching messages:', error);
