@@ -6,11 +6,9 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { CalendarIcon, CarIcon, ClockIcon, CreditCardIcon, ArrowLeftIcon } from 'lucide-react';
-import { Button } from '@/app/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/app/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Skeleton } from '@/app/components/ui/skeleton';
 import { ChatInterface } from '@/app/components/ui/ChatInterface';
-import { use } from 'react';
 
 // Define types for our data
 interface Vehicle {
@@ -32,8 +30,8 @@ interface Booking {
 }
 
 export default function BookingDetailsPage({ params }: { params: { id: string } }) {
-  const bookingId = use(params).id;
-  const { data: session, status } = useSession();
+  const bookingId = params.id;
+  const { status } = useSession();
   const router = useRouter();
   const [booking, setBooking] = useState<Booking | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -102,7 +100,7 @@ export default function BookingDetailsPage({ params }: { params: { id: string } 
   if (status === 'loading' || isLoading) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <div className="mb-6">
+        <div className="mb-4">
           <Link href="/bookings" className="flex items-center text-gray-600 hover:text-gray-900">
             <ArrowLeftIcon className="mr-2 h-4 w-4" />
             Back to My Bookings
@@ -122,9 +120,9 @@ export default function BookingDetailsPage({ params }: { params: { id: string } 
             </CardContent>
           </Card>
           
-          <div className="mt-8">
+          <div className="mt-4">
             <Skeleton className="h-6 w-1/4 mb-4" />
-            <Skeleton className="h-[500px] w-full rounded-lg" />
+            <Skeleton className="h-[300px] w-full rounded-lg" />
           </div>
         </div>
       </div>
@@ -134,7 +132,7 @@ export default function BookingDetailsPage({ params }: { params: { id: string } 
   if (error) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <div className="mb-6">
+        <div className="mb-4">
           <Link href="/bookings" className="flex items-center text-gray-600 hover:text-gray-900">
             <ArrowLeftIcon className="mr-2 h-4 w-4" />
             Back to My Bookings
@@ -153,7 +151,7 @@ export default function BookingDetailsPage({ params }: { params: { id: string } 
   if (!booking) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <div className="mb-6">
+        <div className="mb-4">
           <Link href="/bookings" className="flex items-center text-gray-600 hover:text-gray-900">
             <ArrowLeftIcon className="mr-2 h-4 w-4" />
             Back to My Bookings
@@ -162,7 +160,7 @@ export default function BookingDetailsPage({ params }: { params: { id: string } 
         
         <div className="max-w-4xl mx-auto">
           <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded mb-6">
-            Booking not found. It may have been deleted or you don't have permission to view it.
+            Booking not found. It may have been deleted or you don&apos;t have permission to view it.
           </div>
         </div>
       </div>
@@ -171,7 +169,7 @@ export default function BookingDetailsPage({ params }: { params: { id: string } 
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="mb-6">
+      <div className="mb-4">
         <Link href="/bookings" className="flex items-center text-gray-600 hover:text-gray-900">
           <ArrowLeftIcon className="mr-2 h-4 w-4" />
           Back to My Bookings
@@ -179,64 +177,54 @@ export default function BookingDetailsPage({ params }: { params: { id: string } 
       </div>
       
       <div className="max-w-4xl mx-auto">
-        <Card>
-          <CardHeader>
-            <div className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(booking.status)} mb-2`}>
+        <Card className="mb-4">
+          <CardHeader className="pb-2">
+            <div className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(booking.status)} mb-1`}>
               {booking.status}
             </div>
-            <CardTitle className="text-2xl">{booking.vehicle.model}</CardTitle>
+            <CardTitle className="text-xl">{booking.vehicle.model}</CardTitle>
             <CardDescription>Booking Reference: {booking.id.substring(0, 8)}</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid md:grid-cols-2 gap-6">
-              <div>
-                <h3 className="text-sm font-medium text-gray-500 mb-1">Booking Details</h3>
-                <div className="space-y-3">
+          <CardContent className="pt-0">
+            <div className="flex flex-wrap">
+              <div className="w-1/2 pr-2">
+                <div className="space-y-2">
                   <div className="flex items-center text-sm">
-                    <CalendarIcon className="mr-2 h-4 w-4 opacity-70" />
+                    <CalendarIcon className="mr-2 h-3 w-3 opacity-70" />
                     <span>
                       {formatDate(booking.startDate)} - {formatDate(booking.endDate)}
                     </span>
                   </div>
                   <div className="flex items-center text-sm">
-                    <ClockIcon className="mr-2 h-4 w-4 opacity-70" />
+                    <ClockIcon className="mr-2 h-3 w-3 opacity-70" />
                     <span>{calculateDuration(booking.startDate, booking.endDate)} days</span>
                   </div>
                   <div className="flex items-center text-sm">
-                    <CreditCardIcon className="mr-2 h-4 w-4 opacity-70" />
+                    <CreditCardIcon className="mr-2 h-3 w-3 opacity-70" />
                     <span>${booking.totalPrice.toFixed(2)}</span>
+                  </div>
+                  <div className="flex items-center text-sm">
+                    <CarIcon className="mr-2 h-3 w-3 opacity-70" />
+                    <span>{booking.vehicle.description}</span>
                   </div>
                 </div>
               </div>
               
-              <div>
-                <h3 className="text-sm font-medium text-gray-500 mb-1">Vehicle Information</h3>
-                <div className="space-y-3">
-                  <div className="flex items-center text-sm">
-                    <CarIcon className="mr-2 h-4 w-4 opacity-70" />
-                    <span>{booking.vehicle.model}</span>
-                  </div>
-                  <div className="text-sm">
-                    <p>{booking.vehicle.description}</p>
-                  </div>
+              {booking.vehicle.image && (
+                <div className="w-1/2 pl-2">
+                  <img 
+                    src={booking.vehicle.image} 
+                    alt={booking.vehicle.model} 
+                    className="rounded-lg w-full object-cover max-h-40"
+                  />
                 </div>
-              </div>
+              )}
             </div>
-            
-            {booking.vehicle.image && (
-              <div className="mt-4">
-                <img 
-                  src={booking.vehicle.image} 
-                  alt={booking.vehicle.model} 
-                  className="rounded-lg w-full object-cover max-h-64"
-                />
-              </div>
-            )}
           </CardContent>
         </Card>
         
-        <div className="mt-8">
-          <h2 className="text-xl font-semibold mb-4">Communication</h2>
+        <div>
+          <h2 className="text-xl font-semibold mb-2">Communication</h2>
           <ChatInterface bookingId={booking.id} />
         </div>
       </div>
