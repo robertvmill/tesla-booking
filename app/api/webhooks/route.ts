@@ -27,17 +27,53 @@ export async function POST(request: Request) {
   // Handle the event
   switch (event.type) {
     case 'checkout.session.completed':
+      console.log('Webhook: checkout.session.completed event received');
       const session = event.data.object as Stripe.Checkout.Session;
       
       // Update the booking status to confirmed
       if (session.metadata?.bookingId) {
-        await prisma.booking.update({
-          where: { id: session.metadata.bookingId },
-          data: { 
-            status: 'confirmed',
-            paymentIntentId: session.payment_intent as string,
-          },
+        const bookingId = session.metadata.bookingId;
+        const userId = session.metadata.userId;
+        console.log(`Webhook: Processing booking ${bookingId} for user ${userId}`);
+        
+        // First, get the booking with vehicle details
+        const booking = await prisma.booking.findUnique({
+          where: { id: bookingId },
+          include: { vehicle: true }
         });
+        
+        if (booking) {
+          console.log(`Webhook: Found booking for ${booking.vehicle.model}`);
+          
+          // Update booking status
+          await prisma.booking.update({
+            where: { id: bookingId },
+            data: { 
+              status: 'confirmed',
+            },
+          });
+          console.log(`Webhook: Updated booking status to confirmed`);
+          
+          // Calculate number of days for the booking
+          const startDate = new Date(booking.startDate);
+          const endDate = new Date(booking.endDate);
+          const days = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+          
+          // Create welcome message from admin
+          const message = await prisma.message.create({
+            data: {
+              content: `Thank you for choosing RideReady! We're thrilled you'll be experiencing our ${booking.vehicle.model}. Your reservation for ${days} days has been confirmed. If you have any questions before your trip, feel free to message us here. We look forward to getting you on the road in style!`,
+              bookingId: bookingId,
+              userId: userId,
+              isAdminMessage: true
+            }
+          });
+          console.log(`Webhook: Created welcome message ${message.id}`);
+        } else {
+          console.log(`Webhook: No booking found for ID ${bookingId}`);
+        }
+      } else {
+        console.log('Webhook: No booking metadata found in session');
       }
       break;
       

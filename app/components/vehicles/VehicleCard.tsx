@@ -47,7 +47,7 @@ export default function VehicleCard({ id, model, image, description, pricePerDay
         <h3 className="text-xl font-bold mb-2 text-gray-900">Tesla {model}</h3>
         <p className="text-gray-800 mb-4">{description}</p>
         <div className="flex justify-between items-center">
-          <span className="text-lg font-bold text-gray-900">${pricePerDay}/day</span>
+          <span className="text-sm italic text-gray-600">See calendar for pricing</span>
           <button 
             onClick={handleBookNowClick}
             className="bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-md"

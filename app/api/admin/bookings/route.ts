@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     
     // Parse the request body
     const data = await request.json();
-    const { vehicleId, startDate, endDate, userEmail, totalPrice, status } = data;
+    const { vehicleId, startDate, endDate, userEmail, totalPrice: providedTotalPrice, status } = data;
     
     // Find user by email
     const user = await prisma.user.findUnique({
@@ -70,6 +70,74 @@ export async function POST(request: Request) {
         { error: 'User not found' },
         { status: 404 }
       );
+    }
+    
+    // Find vehicle
+    const vehicle = await prisma.vehicle.findUnique({
+      where: { id: vehicleId },
+    });
+    
+    if (!vehicle) {
+      return NextResponse.json(
+        { error: 'Vehicle not found' },
+        { status: 404 }
+      );
+    }
+    
+    // Calculate days
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    // Calculate base price
+    let basePrice = vehicle.pricePerDay;
+    let totalPrice = providedTotalPrice;
+    
+    // If no total price is provided, calculate it
+    if (!totalPrice) {
+      // Check for special pricing rules that apply to this date range and vehicle
+      const specialPricingRules = await prisma.specialPricing.findMany({
+        where: {
+          OR: [
+            // Apply to all vehicles
+            { applyToAll: true },
+            // Apply to this specific vehicle
+            {
+              vehicles: {
+                some: {
+                  id: vehicleId
+                }
+              }
+            }
+          ],
+          // Overlaps with booking date range
+          AND: [
+            { startDate: { lte: end } },
+            { endDate: { gte: start } }
+          ]
+        },
+        orderBy: {
+          createdAt: 'desc' // Most recently created rule takes precedence
+        }
+      });
+      
+      // If we have special pricing rules, apply them
+      if (specialPricingRules.length > 0) {
+        // Use the most recent rule (first in the sorted array)
+        const rule = specialPricingRules[0];
+        
+        if (rule.priceType === 'multiplier') {
+          // Apply multiplier to base price
+          basePrice = Math.round(basePrice * rule.priceValue);
+        } else if (rule.priceType === 'fixed') {
+          // Override with fixed price
+          basePrice = Math.round(rule.priceValue);
+        }
+      }
+      
+      // Calculate final price
+      totalPrice = basePrice * diffDays;
     }
     
     // Create the booking

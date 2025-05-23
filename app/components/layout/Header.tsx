@@ -36,26 +36,38 @@ export default function Header() {
   const isAdmin = session?.user ? (session.user as {isAdmin?: boolean}).isAdmin : false;
 
   // Fetch unread message count
-  useEffect(() => {
-    const fetchUnreadMessages = async () => {
-      if (session?.user) {
-        try {
-          const res = await fetch('/api/messages/unread');
-          if (res.ok) {
-            const data = await res.json();
-            setUnreadCount(data.count);
-          }
-        } catch (error) {
-          console.error('Failed to fetch unread messages:', error);
+  const fetchUnreadMessages = async () => {
+    if (session?.user) {
+      try {
+        const res = await fetch('/api/messages/unread');
+        if (res.ok) {
+          const data = await res.json();
+          setUnreadCount(data.count);
         }
+      } catch (error) {
+        console.error('Failed to fetch unread messages:', error);
       }
-    };
+    }
+  };
 
+  useEffect(() => {
+    // Fetch initial count
     fetchUnreadMessages();
     
     // Refresh count every 60 seconds
     const interval = setInterval(fetchUnreadMessages, 60000);
-    return () => clearInterval(interval);
+    
+    // Listen for refresh events from ChatInterface
+    const handleRefreshEvent = () => {
+      fetchUnreadMessages();
+    };
+    
+    window.addEventListener('refreshUnreadCount', handleRefreshEvent);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('refreshUnreadCount', handleRefreshEvent);
+    };
   }, [session]);
 
   return (

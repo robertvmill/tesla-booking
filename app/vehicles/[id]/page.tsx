@@ -111,7 +111,8 @@ export default async function VehicleDetailPage({ params }: VehicleDetailPagePro
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <div className="bg-gray-100 p-3 rounded-md">
                   <p className="text-sm text-gray-500">Price</p>
-                  <p className="text-lg font-bold text-gray-900">${vehicle.pricePerDay}/day</p>
+                  <p className="text-lg font-bold text-gray-900">Dynamic Pricing</p>
+                  <p className="text-xs text-gray-500">See calendar for daily rates</p>
                 </div>
                 <div className="bg-gray-100 p-3 rounded-md">
                   <p className="text-sm text-gray-500">Seats</p>
@@ -145,14 +146,18 @@ export default async function VehicleDetailPage({ params }: VehicleDetailPagePro
           </div>
 
           {/* Availability Calendar */}
-          <div id="availability-calendar" className="p-6 border-t border-gray-200">
-            <h2 className="text-2xl font-bold mb-6">Availability Calendar</h2>
-            <VehicleAvailabilityCalendar 
-              vehicleId={vehicle.id} 
-              bookings={vehicle.bookings}
-              vehicleModel={vehicle.model}
-              pricePerDay={vehicle.pricePerDay} 
-            />
+          <div id="availability-calendar" className="p-4 md:p-6 lg:p-8 border-t border-gray-200">
+            <h2 className="text-xl md:text-2xl font-bold mb-4 md:mb-6 text-center">Availability Calendar</h2>
+            <div className="w-full max-w-5xl mx-auto overflow-x-auto">
+              <div className="min-w-full">
+                <VehicleAvailabilityCalendar 
+                  vehicleId={vehicle.id} 
+                  bookings={vehicle.bookings}
+                  vehicleModel={vehicle.model}
+                  pricePerDay={vehicle.pricePerDay} 
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>

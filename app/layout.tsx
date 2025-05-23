@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Tesla Bookings",
+  title: "RideReady",
   description: "Premium Tesla rental service",
   icons: {
     icon: [

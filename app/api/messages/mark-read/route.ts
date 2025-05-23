@@ -7,12 +7,15 @@ import prisma from '@/app/lib/prisma';
  * POST /api/messages/mark-read
  * 
  * Purpose:
- * Marks all unread admin messages as read for a specific booking.
+ * Marks messages as read for a specific booking.
+ * - For regular users: Marks admin messages as read
+ * - For admin users: Marks user messages as read
+ * 
  * This endpoint is called when a user views messages in a booking thread.
  * 
  * Authentication:
  * - Requires authenticated user session
- * - Validates user owns the booking
+ * - Validates user owns the booking or is an admin
  * 
  * Request body:
  * {
@@ -30,8 +33,8 @@ import prisma from '@/app/lib/prisma';
  * Design:
  * 1. Authenticate user via session
  * 2. Validate request parameters
- * 3. Verify user owns the booking
- * 4. Update all unread admin messages to read status
+ * 3. Verify user owns the booking or is admin
+ * 4. Update unread messages based on user type
  * 5. Return success response
  */
 export async function POST(request: Request) {
@@ -59,20 +62,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing bookingId' }, { status: 400 });
     }
     
-    // Check if the booking belongs to the user
+    // Check if the booking exists
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
     });
     
-    if (!booking || booking.userId !== user.id) {
-      return NextResponse.json({ error: 'Booking not found or not authorized' }, { status: 403 });
+    if (!booking) {
+      return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
     }
     
-    // Mark all admin messages in this booking as read
+    // Admin users can mark messages as read for any booking
+    // Regular users can only mark messages as read for their own bookings
+    if (!user.isAdmin && booking.userId !== user.id) {
+      return NextResponse.json({ error: 'Not authorized to access this booking' }, { status: 403 });
+    }
+    
+    // If admin user, mark all user (non-admin) messages as read
+    // If regular user, mark all admin messages as read
     await prisma.message.updateMany({
       where: {
         bookingId: bookingId,
-        isAdminMessage: true,
+        isAdminMessage: !user.isAdmin, // Opposite of user type
         isRead: false,
       },
       data: { 

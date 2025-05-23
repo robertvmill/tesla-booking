@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { format, differenceInDays } from 'date-fns';
+import { format, differenceInDays, eachDayOfInterval } from 'date-fns';
 import { Button } from '@/app/components/ui/button';
 import { loadStripe } from '@stripe/stripe-js';
 import Image from 'next/image';
@@ -16,16 +16,29 @@ function BookingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
-  const [vehicle, setVehicle] = useState<any>(null);
+  const [vehicle, setVehicle] = useState<{
+    id: string;
+    model: string;
+    image?: string;
+    description?: string;
+    pricePerDay: number;
+    seats?: number;
+    range?: string;
+    acceleration?: string;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Simplified state - just track the adjusted price
+  const [adjustedPricePerDay, setAdjustedPricePerDay] = useState<number>(0);
+  // Add daily price breakdown
+  const [dailyPrices, setDailyPrices] = useState<Array<{ date: string, price: number }>>([]);
 
   const vehicleId = searchParams.get('vehicleId');
   const fromDate = searchParams.get('from');
   const toDate = searchParams.get('to');
 
   // Calculate booking details
-  const startDate = fromDate ? new Date(fromDate) : null;
-  const endDate = toDate ? new Date(toDate) : null;
+  const startDate = fromDate ? new Date(fromDate + 'T00:00:00') : null;
+  const endDate = toDate ? new Date(toDate + 'T00:00:00') : null;
   const numberOfDays = startDate && endDate ? differenceInDays(endDate, startDate) + 1 : 0;
 
   useEffect(() => {
@@ -50,7 +63,65 @@ function BookingContent() {
       }
     };
 
+    // Fetch availability to get adjusted price
+    const fetchAvailability = async () => {
+      if (!fromDate || !toDate || !vehicleId) return;
+      
+      try {
+        const response = await fetch(`/api/availability?startDate=${fromDate}&endDate=${toDate}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch availability');
+        }
+        const data = await response.json();
+        
+        // Find the vehicle in the availability results
+        const vehicleData = data.availableVehicles.find((v: {
+          id: string;
+          adjustedPricePerDay?: number;
+          pricePerDay: number;
+          hasSpecialPricing?: boolean;
+        }) => v.id === vehicleId);
+        
+        if (vehicleData) {
+          setAdjustedPricePerDay(vehicleData.adjustedPricePerDay || vehicleData.pricePerDay);
+          
+          // Use the daily prices from the API if available
+          if (vehicleData.dailyPrices && vehicleData.dailyPrices.length > 0) {
+            setDailyPrices(vehicleData.dailyPrices);
+          } else if (vehicleData.hasSpecialPricing && startDate && endDate) {
+            // Fall back to uniform special pricing if no daily breakdown
+            const days = eachDayOfInterval({ start: startDate, end: endDate });
+            const pricesArray = days.map(day => ({
+              date: format(day, 'yyyy-MM-dd'),
+              price: vehicleData.adjustedPricePerDay || vehicleData.pricePerDay
+            }));
+            setDailyPrices(pricesArray);
+          } else if (startDate && endDate) {
+            // Regular pricing for all days
+            const days = eachDayOfInterval({ start: startDate, end: endDate });
+            const pricesArray = days.map(day => ({
+              date: format(day, 'yyyy-MM-dd'),
+              price: vehicleData.pricePerDay
+            }));
+            setDailyPrices(pricesArray);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching availability:', err);
+        // If we fail to get special pricing, we'll fall back to regular pricing
+        if (vehicle && startDate && endDate) {
+          const days = eachDayOfInterval({ start: startDate, end: endDate });
+          const pricesArray = days.map(day => ({
+            date: format(day, 'yyyy-MM-dd'),
+            price: vehicle.pricePerDay
+          }));
+          setDailyPrices(pricesArray);
+        }
+      }
+    };
+
     fetchVehicle();
+    fetchAvailability();
   }, [vehicleId, fromDate, toDate, router]);
 
   const handleCheckout = async () => {
@@ -58,6 +129,9 @@ function BookingContent() {
 
     setIsLoading(true);
     try {
+      // Calculate total from daily prices
+      const calculatedTotal = dailyPrices.reduce((sum, day) => sum + day.price, 0) || totalPrice;
+      
       // Create a checkout session
       const response = await fetch('/api/create-checkout', {
         method: 'POST',
@@ -68,8 +142,10 @@ function BookingContent() {
           vehicleId: vehicle.id,
           startDate: format(startDate, 'yyyy-MM-dd'),
           endDate: format(endDate, 'yyyy-MM-dd'),
-          pricePerDay: vehicle.pricePerDay,
+          pricePerDay: adjustedPricePerDay || vehicle.pricePerDay,
+          dailyPrices: dailyPrices.length > 0 ? dailyPrices : undefined,
           numberOfDays,
+          totalAmount: calculatedTotal,
           vehicleModel: vehicle.model,
         }),
       });
@@ -103,13 +179,18 @@ function BookingContent() {
       } else {
         throw new Error('No checkout URL or session ID returned from the server');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Checkout error:', err);
-      setError(err.message || 'An error occurred during checkout. Please try again.');
+      const errorMsg = err instanceof Error ? err.message : 'An error occurred during checkout. Please try again.';
+      setError(errorMsg);
     } finally {
       setIsLoading(false);
     }
   };
+
+  // Use the adjusted price or fall back to regular price
+  const displayPrice = adjustedPricePerDay || (vehicle?.pricePerDay || 0);
+  const totalPrice = displayPrice * numberOfDays;
 
   if (error) {
     return (
@@ -176,7 +257,7 @@ function BookingContent() {
                 <h2 className="text-xl font-semibold mb-4">Vehicle Details</h2>
                 <div className="bg-gray-100 rounded-lg p-4 mb-4">
                   <div className="h-48 bg-gray-200 relative rounded-md mb-4">
-                    {vehicle.image ? (
+                    {vehicle?.image ? (
                       <Image 
                         src={vehicle.image} 
                         alt={`Tesla ${vehicle.model}`} 
@@ -185,37 +266,39 @@ function BookingContent() {
                       />
                     ) : (
                       <div className="absolute inset-0 flex items-center justify-center text-gray-500">
-                        Tesla {vehicle.model}
+                        Tesla {vehicle?.model}
                       </div>
                     )}
                   </div>
-                  <h3 className="text-lg font-bold">Tesla {vehicle.model}</h3>
-                  <p className="text-gray-700 mt-2">{vehicle.description}</p>
+                  <h3 className="text-lg font-bold">Tesla {vehicle?.model}</h3>
+                  <p className="text-gray-700 mt-2">{vehicle?.description}</p>
                   <div className="mt-4 grid grid-cols-2 gap-2">
                     <div>
                       <span className="text-gray-600 text-sm">Seats:</span>
-                      <p className="font-medium">{vehicle.seats}</p>
+                      <p className="font-medium">{vehicle?.seats}</p>
                     </div>
                     <div>
                       <span className="text-gray-600 text-sm">Range:</span>
-                      <p className="font-medium">{vehicle.range}</p>
+                      <p className="font-medium">{vehicle?.range}</p>
                     </div>
                     <div>
                       <span className="text-gray-600 text-sm">Acceleration:</span>
-                      <p className="font-medium">{vehicle.acceleration}</p>
+                      <p className="font-medium">{vehicle?.acceleration}</p>
                     </div>
                     <div>
-                      <span className="text-gray-600 text-sm">Price Per Day:</span>
-                      <p className="font-medium">${vehicle.pricePerDay}</p>
+                      <span className="text-gray-600 text-sm">Pricing:</span>
+                      <p className="font-medium">Dynamic</p>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Booking Summary */}
+              {/* Booking Summary Section */}
               <div>
+                {/* Section Title */}
                 <h2 className="text-xl font-semibold mb-4">Booking Summary</h2>
                 <div className="bg-gray-100 rounded-lg p-4">
+                  {/* Booking Dates Display */}
                   <div className="mb-4">
                     <h3 className="font-semibold">Dates</h3>
                     <p className="text-gray-700">
@@ -224,21 +307,39 @@ function BookingContent() {
                     <p className="text-sm text-gray-600">{numberOfDays} days</p>
                   </div>
 
+                  {/* Price Breakdown Section */}
                   <div className="mb-4">
                     <h3 className="font-semibold">Price Breakdown</h3>
-                    <div className="flex justify-between mt-1">
-                      <span className="text-gray-700">${vehicle.pricePerDay} × {numberOfDays} days</span>
-                      <span className="font-medium">${vehicle.pricePerDay * numberOfDays}</span>
-                    </div>
+                    {/* Show daily prices if special pricing exists */}
+                    {dailyPrices.length > 0 ? (
+                      <div className="mt-2 max-h-36 overflow-y-auto">
+                        {dailyPrices.map((dayPrice) => (
+                          <div key={dayPrice.date} className="flex justify-between text-gray-700 text-sm py-1">
+                            <span>{format(new Date(dayPrice.date), 'MMM d, yyyy')}</span>
+                            <span className="font-medium">${dayPrice.price}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      // Show simple calculation if no special pricing
+                      <div className="flex justify-between mt-1">
+                        <span className="text-gray-700">
+                          ${displayPrice} × {numberOfDays} days
+                        </span>
+                        <span className="font-medium">${totalPrice}</span>
+                      </div>
+                    )}
                   </div>
 
+                  {/* Total Price Display */}
                   <div className="border-t border-gray-300 my-4 pt-4">
                     <div className="flex justify-between">
                       <span className="font-semibold">Total</span>
-                      <span className="font-bold text-lg">${vehicle.pricePerDay * numberOfDays}</span>
+                      <span className="font-bold text-lg">${dailyPrices.reduce((sum, day) => sum + day.price, 0) || totalPrice}</span>
                     </div>
                   </div>
 
+                  {/* Checkout Button */}
                   <Button
                     onClick={handleCheckout}
                     disabled={isLoading}
@@ -254,8 +355,9 @@ function BookingContent() {
                     )}
                   </Button>
 
+                  {/* Redirect Notice */}
                   <p className="text-xs text-gray-500 mt-4 text-center">
-                    You'll be redirected to our secure payment provider to complete your booking.
+                    You&apos;ll be redirected to our secure payment provider to complete your booking.
                   </p>
                 </div>
               </div>

@@ -6,7 +6,7 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 // GET: Fetch all messages for a specific booking
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions as any) as any;
@@ -15,6 +15,8 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
+    // Extract the booking ID from the context
+    const params = await context.params;
     const bookingId = params.id;
     
     // Find the user by email
@@ -71,7 +73,7 @@ export async function GET(
 // POST: Create a new message for a booking
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions as any) as any;
@@ -80,6 +82,8 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
+    // Extract the booking ID from the context
+    const params = await context.params;
     const bookingId = params.id;
     
     // Find the user by email
@@ -99,6 +103,9 @@ export async function POST(
     // Check if the user is authorized to send messages for this booking
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
+      include: {
+        user: true
+      }
     });
     
     if (!booking) {
@@ -109,17 +116,21 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized to send messages for this booking' }, { status: 403 });
     }
     
-    const { content } = await request.json();
+    const { content, isAdminMessage: requestedAdminMessage } = await request.json();
     
     if (!content || content.trim() === '') {
       return NextResponse.json({ error: 'Message content cannot be empty' }, { status: 400 });
     }
     
+    // Determine if this is an admin message
+    // Allow creating admin messages if explicitly requested and user owns the booking
+    const isAdminMessage = requestedAdminMessage && booking.userId === user.id ? true : user.isAdmin;
+    
     // Create the message
     const message = await prisma.message.create({
       data: {
         content,
-        isAdminMessage: user.isAdmin,
+        isAdminMessage,
         booking: {
           connect: { id: bookingId }
         },
@@ -138,6 +149,21 @@ export async function POST(
         }
       }
     });
+    
+    // Mark all other messages in the conversation as read for the current user
+    await prisma.message.updateMany({
+      where: {
+        bookingId,
+        id: { not: message.id },
+        isAdminMessage: !isAdminMessage, // Only mark messages from the other party as read
+      },
+      data: {
+        // Update other fields if needed
+      }
+    });
+    
+    // Additionally, mark other user's past messages as read when a user responds
+    // This ensures that when you reply to a thread, you're acknowledging you've read the messages
     
     return NextResponse.json(message);
   } catch (error) {

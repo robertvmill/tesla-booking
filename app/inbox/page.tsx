@@ -22,11 +22,13 @@ interface Booking {
   startDate: string;
   endDate: string;
   vehicle: Vehicle;
+  user?: User; // Added user for admin view
 }
 
 interface User {
   id: string;
   name: string | null;
+  email?: string | null; // Added email for admin view
   image: string | null;
   isAdmin: boolean;
 }
@@ -50,6 +52,7 @@ export default function InboxPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // Handle authentication and data fetching on component mount
   useEffect(() => {
@@ -63,6 +66,20 @@ export default function InboxPage() {
     if (status === 'authenticated') {
       fetchMessages();
     }
+    
+    // Add event listener for refreshing messages
+    const handleRefresh = () => {
+      if (status === 'authenticated') {
+        fetchMessages();
+      }
+    };
+    
+    window.addEventListener('refreshUnreadCount', handleRefresh);
+    
+    // Cleanup event listener
+    return () => {
+      window.removeEventListener('refreshUnreadCount', handleRefresh);
+    };
   }, [status, router]);
 
   // Fetch messages from the API
@@ -77,6 +94,13 @@ export default function InboxPage() {
       
       const data = await response.json();
       setMessages(data.messages);
+      
+      // Check if the current user is an admin
+      const userResponse = await fetch('/api/user');
+      if (userResponse.ok) {
+        const userData = await userResponse.json();
+        setIsAdmin(userData.user.isAdmin);
+      }
     } catch (err) {
       console.error('Error fetching messages:', err);
       setError('Failed to load your messages. Please try again later.');
@@ -98,10 +122,20 @@ export default function InboxPage() {
       
       // Update local state to reflect read status
       setMessages(prevMessages => 
-        prevMessages.map(msg => 
-          msg.bookingId === bookingId && msg.isAdminMessage ? { ...msg, isRead: true } : msg
-        )
+        prevMessages.map(msg => {
+          if (msg.bookingId === bookingId) {
+            if (isAdmin && !msg.isAdminMessage) {
+              return { ...msg, isRead: true };
+            } else if (!isAdmin && msg.isAdminMessage) {
+              return { ...msg, isRead: true };
+            }
+          }
+          return msg;
+        })
       );
+      
+      // Dispatch event to refresh unread count in header
+      window.dispatchEvent(new Event('refreshUnreadCount'));
       
     } catch (error) {
       console.error('Failed to mark messages as read:', error);
@@ -115,6 +149,9 @@ export default function InboxPage() {
 
   // Check if a booking has any unread messages
   const hasUnreadMessages = (bookingMessages: Message[]) => {
+    if (isAdmin) {
+      return bookingMessages.some(msg => !msg.isAdminMessage && !msg.isRead);
+    }
     return bookingMessages.some(msg => msg.isAdminMessage && !msg.isRead);
   };
 
@@ -156,7 +193,7 @@ export default function InboxPage() {
   // Main inbox interface rendering
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-6">Inbox</h1>
+      <h1 className="text-2xl font-bold mb-6">Inbox {isAdmin && "(Admin View)"}</h1>
       
       {/* Display error message if fetch failed */}
       {error && (
@@ -208,6 +245,11 @@ export default function InboxPage() {
                         <div>
                           <CardTitle className="text-lg">
                             {booking.vehicle.model}
+                            {isAdmin && booking.user && (
+                              <span className="ml-2 text-sm font-normal text-gray-500">
+                                (Booked by: {booking.user.name || booking.user.email})
+                              </span>
+                            )}
                           </CardTitle>
                           <CardDescription>
                             {format(new Date(booking.startDate), 'MMM d')} - {format(new Date(booking.endDate), 'MMM d, yyyy')}
@@ -224,21 +266,24 @@ export default function InboxPage() {
                   <CardContent>
                     <div className="flex items-start gap-3">
                       <div className={`rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0 ${
-                        latestMessage.isAdminMessage && !latestMessage.isRead
+                        (latestMessage.isAdminMessage && !latestMessage.isRead && !isAdmin) || 
+                        (!latestMessage.isAdminMessage && !latestMessage.isRead && isAdmin)
                           ? 'bg-red-100 text-red-600'
                           : 'bg-gray-100'
                       }`}>
-                        {latestMessage.isAdminMessage ? 'T' : 'Y'}
+                        {latestMessage.isAdminMessage ? 'R' : (isAdmin ? latestMessage.user.name?.charAt(0) || 'U' : 'Y')}
                       </div>
                       <div className="flex-1">
                         <div className="flex justify-between items-center mb-1">
                           <p className={`font-medium text-sm ${
-                            latestMessage.isAdminMessage && !latestMessage.isRead
+                            (latestMessage.isAdminMessage && !latestMessage.isRead && !isAdmin) || 
+                            (!latestMessage.isAdminMessage && !latestMessage.isRead && isAdmin)
                               ? 'text-red-600'
                               : ''
                           }`}>
-                            {latestMessage.isAdminMessage ? 'Tesla Support' : 'You'}
-                            {latestMessage.isAdminMessage && !latestMessage.isRead && (
+                            {latestMessage.isAdminMessage ? 'RideReady Support' : (isAdmin ? (latestMessage.user.name || latestMessage.user.email) : 'You')}
+                            {((latestMessage.isAdminMessage && !latestMessage.isRead && !isAdmin) || 
+                             (!latestMessage.isAdminMessage && !latestMessage.isRead && isAdmin)) && (
                               <span className="ml-2 text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">New</span>
                             )}
                           </p>
@@ -247,7 +292,8 @@ export default function InboxPage() {
                           </p>
                         </div>
                         <p className={`line-clamp-2 ${
-                          latestMessage.isAdminMessage && !latestMessage.isRead
+                          (latestMessage.isAdminMessage && !latestMessage.isRead && !isAdmin) ||
+                          (!latestMessage.isAdminMessage && !latestMessage.isRead && isAdmin)
                             ? 'font-medium text-gray-900'
                             : 'text-gray-700'
                         }`}>

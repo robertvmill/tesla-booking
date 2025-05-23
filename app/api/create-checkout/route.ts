@@ -69,33 +69,22 @@ export async function POST(request: Request) {
     const start = new Date(startDate);
     const end = new Date(endDate);
     const durationInMs = end.getTime() - start.getTime();
-    const days = Math.ceil(durationInMs / (1000 * 60 * 60 * 24));
+    const days = Math.ceil(durationInMs / (1000 * 60 * 60 * 24)) + 1; // Add 1 to include both start and end dates
     const totalAmount = vehicle.pricePerDay * days;
     
-    // Create pending booking record
+    // Create booking with status 'pending'
     const booking = await prisma.booking.create({
       data: {
         startDate: start,
         endDate: end,
         totalPrice: totalAmount,
-        status: 'pending',
+        status: 'pending', // Set initial status as pending until payment is confirmed
         userId: user.id,
         vehicleId: vehicle.id
       },
     });
     
     console.log('Created booking:', booking.id);
-    
-    // Create welcome message from admin
-    await prisma.message.create({
-      data: {
-        content: `Thank you for choosing Tesla Bookings! We're thrilled you'll be experiencing our ${vehicle.model}. Your reservation for ${days} days has been confirmed. If you have any questions before your trip, feel free to message us here. We look forward to getting you on the road in style!`,
-        bookingId: booking.id,
-        userId: user.id,  // The message is associated with the user
-        isAdminMessage: true,  // But sent from the admin
-        isRead: false  // Mark as unread initially
-      }
-    });
     
     // Set up Stripe checkout session
     const checkoutSession = await stripe.checkout.sessions.create({

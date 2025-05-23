@@ -1,12 +1,24 @@
+// -------------------------------------------------------
+// AdminCalendarPage Component
+// -------------------------------------------------------
+// A comprehensive calendar view for managing vehicle bookings and time-off periods
+// Features:
+// - Monthly/Agenda view toggle
+// - Vehicle filtering
+// - Booking creation/cancellation
+// - Vehicle time-off management
+// - Interactive date selection
+// - Responsive layout
+// -------------------------------------------------------
+
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { format, parseISO, addDays, addMonths, getDate, startOfMonth, 
-  endOfMonth, eachDayOfInterval, isSameMonth, isSameDay } from 'date-fns';
-import { ArrowLeftIcon, ArrowRightIcon, TrashIcon, CheckIcon, XIcon, PlusIcon, CalendarIcon } from 'lucide-react';
+import { format, parseISO, addDays } from 'date-fns';
+import { ArrowLeftIcon, TrashIcon, CheckIcon, XIcon, PlusIcon, CalendarIcon, DollarSignIcon } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import {
@@ -18,7 +30,18 @@ import {
   DialogTitle,
 } from "@/app/components/ui/dialog";
 
-// Define types for our data
+// FullCalendar imports
+import FullCalendar from '@fullcalendar/react';
+import dayGridPlugin from '@fullcalendar/daygrid';
+import timeGridPlugin from '@fullcalendar/timegrid';
+import listPlugin from '@fullcalendar/list';
+import interactionPlugin from '@fullcalendar/interaction';
+import { DateSelectArg, EventClickArg } from '@fullcalendar/core';
+
+// -------------------------------------------------------
+// Type Definitions
+// -------------------------------------------------------
+
 interface Vehicle {
   id: string;
   model: string;
@@ -51,18 +74,60 @@ interface VehicleTimeOff {
   reason: string;
 }
 
+interface SpecialPricing {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  priceType: 'multiplier' | 'fixed';
+  priceValue: number;
+  applyToAll: boolean;
+  vehicles: { id: string; model: string }[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface CalendarEvent {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  extendedProps: {
+    type: 'booking' | 'timeOff' | 'specialPricing';
+    booking?: Booking;
+    timeOff?: VehicleTimeOff;
+    specialPricing?: SpecialPricing;
+    vehicleId: string;
+    vehicleModel: string;
+    status?: string;
+  };
+  backgroundColor?: string;
+  borderColor?: string;
+  textColor?: string;
+  display?: string;
+  allDay?: boolean;
+}
+
+// -------------------------------------------------------
+// Main Component
+// -------------------------------------------------------
+
 export default function AdminCalendarPage() {
+  // -------------------------------------------------------
+  // State Management
+  // -------------------------------------------------------
   const { data: session, status } = useSession();
   const router = useRouter();
+  const calendarRef = useRef(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   
-  // New state for vehicle management
+  // Vehicle Management State
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [dateRange, setDateRange] = useState<[Date | null, Date | null]>([null, null]);
   const [timeOffDialogOpen, setTimeOffDialogOpen] = useState(false);
@@ -71,14 +136,26 @@ export default function AdminCalendarPage() {
   const [newBookingDialogOpen, setNewBookingDialogOpen] = useState(false);
   const [customerEmail, setCustomerEmail] = useState('');
   const [totalPrice, setTotalPrice] = useState(0);
-  const [viewMode, setViewMode] = useState<'month' | 'agenda'>('month');
+  const [calendarView, setCalendarView] = useState<'dayGridMonth' | 'listMonth'>('dayGridMonth');
   
-  // State for date selection on calendar
-  const [selectionMode, setSelectionMode] = useState<'none' | 'timeOff'>('none');
-  const [selectedDates, setSelectedDates] = useState<Date[]>([]);
+  // Calendar Selection State
   const [selectedVehiclesForTimeOff, setSelectedVehiclesForTimeOff] = useState<string[]>([]);
+  
+  // Special Pricing State
+  const [specialPricingDialogOpen, setSpecialPricingDialogOpen] = useState(false);
+  const [specialPricingRules, setSpecialPricingRules] = useState<SpecialPricing[]>([]);
+  const [selectedSpecialPricing, setSelectedSpecialPricing] = useState<SpecialPricing | null>(null);
+  const [specialPricingName, setSpecialPricingName] = useState('');
+  const [priceType, setPriceType] = useState<'multiplier' | 'fixed'>('multiplier');
+  const [priceValue, setPriceValue] = useState<number>(1);
+  const [applyToAllVehicles, setApplyToAllVehicles] = useState(true);
+  const [selectedVehiclesForPricing, setSelectedVehiclesForPricing] = useState<string[]>([]);
+  const [deleteSpecialPricingDialogOpen, setDeleteSpecialPricingDialogOpen] = useState(false);
 
-  // Redirect if user is not authenticated or not an admin
+  // -------------------------------------------------------
+  // Authentication & Initial Data Loading
+  // -------------------------------------------------------
+
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/login?callbackUrl=/admin/calendar');
@@ -96,10 +173,67 @@ export default function AdminCalendarPage() {
     if (status === 'authenticated' && isAdmin) {
       fetchBookings();
       fetchVehicles();
+      fetchSpecialPricing();
+      
+      // Check for stored commands from other pages
+      const openSpecialPricing = localStorage.getItem('openSpecialPricing');
+      const editSpecialPricingId = localStorage.getItem('editSpecialPricing');
+      
+      if (openSpecialPricing === 'true') {
+        // Clear the command
+        localStorage.removeItem('openSpecialPricing');
+        
+        // Open the dialog after a short delay to make sure data is loaded
+        setTimeout(() => {
+          resetSpecialPricingForm();
+          setSpecialPricingDialogOpen(true);
+        }, 500);
+      }
+      
+      if (editSpecialPricingId) {
+        // Clear the command
+        localStorage.removeItem('editSpecialPricing');
+        
+        // Open the edit dialog after data is loaded
+        setTimeout(async () => {
+          try {
+            const response = await fetch(`/api/admin/special-pricing/${editSpecialPricingId}`);
+            
+            if (!response.ok) {
+              throw new Error('Failed to fetch special pricing rule');
+            }
+            
+            const data = await response.json();
+            const rule = data.specialPricing;
+            
+            if (rule) {
+              setSelectedSpecialPricing(rule);
+              setSpecialPricingName(rule.name);
+              setPriceType(rule.priceType);
+              setPriceValue(rule.priceValue);
+              setApplyToAllVehicles(rule.applyToAll);
+              
+              if (!rule.applyToAll && rule.vehicles) {
+                setSelectedVehiclesForPricing(rule.vehicles.map((v: { id: string }) => v.id));
+              } else {
+                setSelectedVehiclesForPricing([]);
+              }
+              
+              setDateRange([new Date(rule.startDate), new Date(rule.endDate)]);
+              setSpecialPricingDialogOpen(true);
+            }
+          } catch (err) {
+            console.error('Error fetching special pricing rule:', err);
+          }
+        }, 500);
+      }
     }
   }, [status, session, router]);
 
-  // Calculate total price when date range or selected vehicle changes
+  // -------------------------------------------------------
+  // Price Calculation Effect
+  // -------------------------------------------------------
+
   useEffect(() => {
     if (selectedVehicle && dateRange[0] && dateRange[1]) {
       // Add 1 to include both start and end dates
@@ -109,6 +243,10 @@ export default function AdminCalendarPage() {
       setTotalPrice(0);
     }
   }, [dateRange, selectedVehicle]);
+
+  // -------------------------------------------------------
+  // Data Fetching Functions
+  // -------------------------------------------------------
 
   const fetchBookings = async () => {
     setIsLoading(true);
@@ -173,41 +311,55 @@ export default function AdminCalendarPage() {
     }
   };
 
+  const fetchSpecialPricing = async () => {
+    try {
+      const response = await fetch('/api/admin/special-pricing');
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch special pricing rules');
+      }
+      
+      const data = await response.json();
+      setSpecialPricingRules(data.specialPricing || []);
+    } catch (err) {
+      console.error('Error fetching special pricing:', err);
+      setError('Failed to load special pricing rules. Please try again later.');
+    }
+  };
+
+  // -------------------------------------------------------
+  // Utility Functions
+  // -------------------------------------------------------
+
   // Get color based on booking status
   function getStatusColor(status: string, isHex: boolean = false) {
     switch (status.toLowerCase()) {
       case 'pending':
-        return isHex ? '#fef9c3' : 'bg-yellow-100 text-yellow-800';
+        return isHex ? '#fbbf24' : 'bg-yellow-400 text-yellow-900'; // More visible yellow
       case 'confirmed':
-        return isHex ? '#dcfce7' : 'bg-green-100 text-green-800';
+        return isHex ? '#4ade80' : 'bg-green-400 text-green-900'; // More saturated green
       case 'completed':
-        return isHex ? '#dbeafe' : 'bg-blue-100 text-blue-800';
+        return isHex ? '#60a5fa' : 'bg-blue-400 text-blue-900'; // More saturated blue
       case 'cancelled':
-        return isHex ? '#fee2e2' : 'bg-red-100 text-red-800';
+        return isHex ? '#f87171' : 'bg-red-400 text-red-900'; // More saturated red
       default:
-        return isHex ? '#f3f4f6' : 'bg-gray-100 text-gray-800';
+        return isHex ? '#9ca3af' : 'bg-gray-400 text-gray-900'; // Darker gray
     }
   }
 
+  function getSpecialPricingColor(priceType: string, isHex: boolean = false) {
+    return priceType === 'multiplier' 
+      ? (isHex ? '#dbeafe' : 'bg-blue-100 text-blue-800') // Blue for multipliers
+      : (isHex ? '#dcfce7' : 'bg-green-100 text-green-800'); // Green for fixed prices
+  }
+
+  // -------------------------------------------------------
+  // Event Handlers
+  // -------------------------------------------------------
+
   // Add time off period for vehicle(s)
   const handleAddTimeOff = () => {
-    // Use either date range from inputs or selected dates from calendar
-    let startDate: Date | null = null;
-    let endDate: Date | null = null;
-    
-    // If dates were selected on the calendar
-    if (selectedDates.length > 0) {
-      // Sort dates to find min and max
-      const sortedDates = [...selectedDates].sort((a, b) => a.getTime() - b.getTime());
-      startDate = sortedDates[0];
-      endDate = sortedDates[sortedDates.length - 1];
-    } else if (dateRange[0] && dateRange[1]) {
-      // Otherwise use date range from inputs
-      startDate = dateRange[0];
-      endDate = dateRange[1];
-    }
-    
-    if (!startDate || !endDate || !timeOffReason) {
+    if (!dateRange[0] || !dateRange[1] || !timeOffReason) {
       return;
     }
     
@@ -225,8 +377,8 @@ export default function AdminCalendarPage() {
     const newTimeOffs = targetVehicleIds.map(vehicleId => ({
       id: `to_${Date.now()}_${vehicleId}`,
       vehicleId,
-      startDate,
-      endDate,
+      startDate: dateRange[0]!,
+      endDate: dateRange[1]!,
       reason: timeOffReason
     }));
     
@@ -234,29 +386,43 @@ export default function AdminCalendarPage() {
     setTimeOffDialogOpen(false);
     setDateRange([null, null]);
     setTimeOffReason('');
-    setSelectedDates([]);
-    setSelectionMode('none');
     setSelectedVehiclesForTimeOff([]);
   };
-  
-  // Toggle date selection for time off
-  const toggleDateSelection = (date: Date) => {
-    if (selectionMode !== 'timeOff') return;
+
+  // Handle date selection from the calendar
+  const handleDateSelect = (selectInfo: DateSelectArg) => {
+    setDateRange([selectInfo.start, selectInfo.end]);
+    // Default to time-off dialog for now
+    setTimeOffDialogOpen(true);
+  };
+
+  // Handle event click
+  const handleEventClick = (clickInfo: EventClickArg) => {
+    const eventType = clickInfo.event.extendedProps.type;
     
-    setSelectedDates(prev => {
-      // Check if date is already selected
-      const isSelected = prev.some(d => 
-        isSameDay(d, date)
-      );
+    if (eventType === 'booking') {
+      setSelectedBooking(clickInfo.event.extendedProps.booking);
+    } else if (eventType === 'specialPricing') {
+      setSelectedSpecialPricing(clickInfo.event.extendedProps.specialPricing);
       
-      if (isSelected) {
-        // Remove if already selected
-        return prev.filter(d => !isSameDay(d, date));
+      // Prefill the form data for editing
+      const rule = clickInfo.event.extendedProps.specialPricing;
+      setSpecialPricingName(rule.name);
+      setPriceType(rule.priceType);
+      setPriceValue(rule.priceValue);
+      setApplyToAllVehicles(rule.applyToAll);
+      
+      if (!rule.applyToAll && rule.vehicles) {
+        setSelectedVehiclesForPricing(rule.vehicles.map((v: { id: string }) => v.id));
       } else {
-        // Add if not selected
-        return [...prev, date];
+        setSelectedVehiclesForPricing([]);
       }
-    });
+      
+      setDateRange([new Date(rule.startDate), new Date(rule.endDate)]);
+      
+      // Open the dialog for editing
+      setSpecialPricingDialogOpen(true);
+    }
   };
 
   // Create a new booking
@@ -333,41 +499,228 @@ export default function AdminCalendarPage() {
     }
   };
 
-  // Generate month days
-  const monthDays = useMemo(() => {
-    const start = startOfMonth(currentMonth);
-    const end = endOfMonth(currentMonth);
-    return eachDayOfInterval({ start, end });
-  }, [currentMonth]);
+  // Handle booking deletion
+  const handleDeleteBooking = async () => {
+    if (!selectedBooking) return;
+    
+    try {
+      const response = await fetch(`/api/admin/bookings/${selectedBooking.id}`, {
+        method: 'DELETE',
+      });
 
-  // Get bookings for a specific day
-  const getBookingsForDay = (day: Date) => {
-    return bookings.filter(booking => {
-      if (!booking || !booking.startDate || !booking.endDate || !booking.vehicle) return false;
+      if (!response.ok) {
+        throw new Error('Failed to delete booking');
+      }
+
+      // Remove the booking from the local state
+      setBookings(bookings.filter(booking => booking.id !== selectedBooking.id));
       
-      // Filter by vehicle if one is selected
-      if (selectedVehicle && booking.vehicle.id !== selectedVehicle.id) return false;
-      
-      const startDate = parseISO(booking.startDate);
-      const endDate = parseISO(booking.endDate);
-      
-      // Check if the day falls within the booking period (inclusive)
-      return (day >= startDate && day <= endDate);
-    });
+      setDeleteDialogOpen(false);
+      setSelectedBooking(null);
+    } catch (err) {
+      console.error('Error deleting booking:', err);
+      setError('Failed to delete booking. Please try again.');
+    }
   };
 
-  // Get time offs for a specific day
-  const getTimeOffsForDay = (day: Date) => {
-    return vehicleTimeOffs.filter(timeOff => {
-      if (!timeOff || !timeOff.startDate || !timeOff.endDate) return false;
+  // Add special pricing rule
+  const handleAddSpecialPricing = async () => {
+    if (!dateRange[0] || !dateRange[1] || !specialPricingName || priceValue === 0) {
+      return;
+    }
+    
+    try {
+      const payload = {
+        name: specialPricingName,
+        startDate: format(dateRange[0], 'yyyy-MM-dd'),
+        endDate: format(dateRange[1], 'yyyy-MM-dd'),
+        priceType,
+        priceValue,
+        applyToAll: applyToAllVehicles,
+        vehicleIds: !applyToAllVehicles ? selectedVehiclesForPricing : []
+      };
       
-      // Filter by vehicle if one is selected
-      if (selectedVehicle && timeOff.vehicleId !== selectedVehicle.id) return false;
+      const response = await fetch('/api/admin/special-pricing', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create special pricing rule');
+      }
+
+      // Refresh special pricing rules
+      fetchSpecialPricing();
       
-      // Check if the day falls within the time off period (inclusive)
-      return (day >= timeOff.startDate && day <= timeOff.endDate);
-    });
+      // Clear form and close dialog
+      setSpecialPricingDialogOpen(false);
+      resetSpecialPricingForm();
+    } catch (err) {
+      console.error('Error creating special pricing rule:', err);
+      setError('Failed to create special pricing rule. Please try again.');
+    }
   };
+  
+  // Handle special pricing deletion
+  const handleDeleteSpecialPricing = async () => {
+    if (!selectedSpecialPricing) return;
+    
+    try {
+      const response = await fetch(`/api/admin/special-pricing/${selectedSpecialPricing.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete special pricing rule');
+      }
+
+      // Remove the rule from the local state
+      setSpecialPricingRules(specialPricingRules.filter(rule => rule.id !== selectedSpecialPricing.id));
+      
+      setDeleteSpecialPricingDialogOpen(false);
+      setSelectedSpecialPricing(null);
+    } catch (err) {
+      console.error('Error deleting special pricing rule:', err);
+      setError('Failed to delete special pricing rule. Please try again.');
+    }
+  };
+  
+  const resetSpecialPricingForm = () => {
+    setSpecialPricingName('');
+    setPriceType('multiplier');
+    setPriceValue(1);
+    setApplyToAllVehicles(true);
+    setSelectedVehiclesForPricing([]);
+    setDateRange([null, null]);
+  };
+
+  // -------------------------------------------------------
+  // Calendar Events
+  // -------------------------------------------------------
+
+  // Convert bookings, time offs, and special pricing to calendar events
+  const calendarEvents = useMemo(() => {
+    const events: CalendarEvent[] = [];
+    
+    // Add bookings as events
+    bookings.forEach(booking => {
+      // Skip if we're filtering by vehicle and this booking is for a different vehicle
+      if (selectedVehicle && booking.vehicle.id !== selectedVehicle.id) {
+        return;
+      }
+      
+      const statusColor = getStatusColor(booking.status, true);
+      
+      events.push({
+        id: `booking_${booking.id}`,
+        title: `${booking.vehicle.model} - ${booking.user.name || booking.user.email}`,
+        start: booking.startDate,
+        end: booking.endDate,
+        backgroundColor: statusColor,
+        borderColor: statusColor,
+        allDay: true,
+        extendedProps: {
+          type: 'booking',
+          booking: booking,
+          vehicleId: booking.vehicle.id,
+          vehicleModel: booking.vehicle.model,
+          status: booking.status
+        }
+      });
+    });
+    
+    // Add time offs as events
+    vehicleTimeOffs.forEach(timeOff => {
+      // Skip if we're filtering by vehicle and this time off is for a different vehicle
+      if (selectedVehicle && timeOff.vehicleId !== selectedVehicle.id) {
+        return;
+      }
+      
+      const vehicle = vehicles.find(v => v.id === timeOff.vehicleId);
+      
+      events.push({
+        id: `timeOff_${timeOff.id}`,
+        title: `${vehicle?.model || 'Vehicle'} - ${timeOff.reason}`,
+        start: format(timeOff.startDate, 'yyyy-MM-dd'),
+        end: format(timeOff.endDate, 'yyyy-MM-dd'),
+        backgroundColor: '#94a3b8', // slate-400
+        borderColor: '#64748b', // slate-500
+        display: 'block',
+        allDay: true,
+        extendedProps: {
+          type: 'timeOff',
+          timeOff: timeOff,
+          vehicleId: timeOff.vehicleId,
+          vehicleModel: vehicle?.model || 'Vehicle'
+        }
+      });
+    });
+    
+    // Add special pricing as events
+    specialPricingRules.forEach(rule => {
+      // If rule applies to all vehicles or we're not filtering
+      if (rule.applyToAll || !selectedVehicle) {
+        const priceTypeColor = getSpecialPricingColor(rule.priceType, true);
+        const ruleTitle = rule.applyToAll 
+          ? `All Vehicles - ${rule.name}`
+          : `${rule.vehicles.length} Vehicles - ${rule.name}`;
+        
+        events.push({
+          id: `specialPrice_${rule.id}`,
+          title: `💰 ${ruleTitle}: ${rule.priceType === 'multiplier' ? `${rule.priceValue}x` : `$${rule.priceValue}`}`,
+          start: rule.startDate,
+          end: rule.endDate,
+          backgroundColor: priceTypeColor,
+          borderColor: priceTypeColor,
+          textColor: '#000000',
+          display: 'block',
+          allDay: true,
+          extendedProps: {
+            type: 'specialPricing',
+            specialPricing: rule,
+            vehicleId: 'all',
+            vehicleModel: 'All Vehicles'
+          }
+        });
+      } 
+      // If rule applies to specific vehicles and we're filtering
+      else if (!rule.applyToAll && selectedVehicle) {
+        // Check if this rule applies to the selected vehicle
+        const appliesTo = rule.vehicles.some(v => v.id === selectedVehicle.id);
+        
+        if (appliesTo) {
+          const priceTypeColor = getSpecialPricingColor(rule.priceType, true);
+          
+          events.push({
+            id: `specialPrice_${rule.id}_${selectedVehicle.id}`,
+            title: `💰 ${selectedVehicle.model} - ${rule.name}: ${rule.priceType === 'multiplier' ? `${rule.priceValue}x` : `$${rule.priceValue}`}`,
+            start: rule.startDate,
+            end: rule.endDate,
+            backgroundColor: priceTypeColor,
+            borderColor: priceTypeColor,
+            textColor: '#000000',
+            display: 'block',
+            allDay: true,
+            extendedProps: {
+              type: 'specialPricing',
+              specialPricing: rule,
+              vehicleId: selectedVehicle.id,
+              vehicleModel: selectedVehicle.model
+            }
+          });
+        }
+      }
+    });
+    
+    return events;
+  }, [bookings, vehicleTimeOffs, specialPricingRules, selectedVehicle, vehicles]);
+
+  // -------------------------------------------------------
+  // Loading State
+  // -------------------------------------------------------
 
   if (status === 'loading' || isLoading) {
     return (
@@ -384,6 +737,10 @@ export default function AdminCalendarPage() {
       </div>
     );
   }
+
+  // -------------------------------------------------------
+  // Main Render
+  // -------------------------------------------------------
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -402,29 +759,6 @@ export default function AdminCalendarPage() {
         </div>
       )}
       
-      {selectionMode === 'timeOff' && (
-        <div className="mb-6 bg-purple-100 border border-purple-300 p-3 rounded-md text-purple-800 flex justify-between items-center">
-          <span>
-            <span className="font-semibold">Time Off Selection Mode:</span> Click on days to select/deselect them for time off periods.
-            {selectedDates.length > 0 && (
-              <span className="ml-2">({selectedDates.length} days selected)</span>
-            )}
-          </span>
-          <Button 
-            variant="outline" 
-            size="sm"
-            className="bg-white"
-            onClick={() => {
-              setSelectionMode('none');
-              setSelectedDates([]);
-            }}
-          >
-            <XIcon className="h-4 w-4 mr-1" />
-            Cancel
-          </Button>
-        </div>
-      )}
-      
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap gap-2">
           <select 
@@ -434,7 +768,6 @@ export default function AdminCalendarPage() {
               const vehicleId = e.target.value;
               setSelectedVehicle(vehicleId ? vehicles.find(v => v.id === vehicleId) || null : null);
             }}
-            disabled={selectionMode === 'timeOff'}
           >
             <option value="">All Vehicles</option>
             {vehicles.map(vehicle => (
@@ -444,12 +777,11 @@ export default function AdminCalendarPage() {
           
           <select
             className="px-3 py-2 border rounded-md"
-            value={viewMode}
-            onChange={(e) => setViewMode(e.target.value as 'month' | 'agenda')}
-            disabled={selectionMode === 'timeOff'}
+            value={calendarView}
+            onChange={(e) => setCalendarView(e.target.value as 'dayGridMonth' | 'listMonth')}
           >
-            <option value="month">Month</option>
-            <option value="agenda">Agenda</option>
+            <option value="dayGridMonth">Month</option>
+            <option value="listMonth">List</option>
           </select>
         </div>
         
@@ -457,166 +789,63 @@ export default function AdminCalendarPage() {
           <Button 
             variant="outline" 
             onClick={() => setNewBookingDialogOpen(true)}
-            disabled={selectionMode === 'timeOff'}
           >
             <PlusIcon className="h-4 w-4 mr-2" />
             New Booking
           </Button>
           <Button 
-            variant={selectionMode === 'timeOff' ? 'default' : 'outline'}
-            onClick={() => {
-              if (selectionMode === 'timeOff') {
-                setTimeOffDialogOpen(true);
-              } else {
-                setTimeOffDialogOpen(true);
-              }
-            }}
+            variant="outline"
+            onClick={() => setTimeOffDialogOpen(true)}
           >
             <CalendarIcon className="h-4 w-4 mr-2" />
-            {selectionMode === 'timeOff' ? 'Continue to Time Off Form' : 'Add Time Off'}
+            Add Time Off
+          </Button>
+          <Button 
+            variant="outline"
+            className="border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100"
+            onClick={() => {
+              resetSpecialPricingForm();
+              setSpecialPricingDialogOpen(true);
+            }}
+          >
+            <DollarSignIcon className="h-4 w-4 mr-2" />
+            Special Pricing
           </Button>
         </div>
       </div>
       
       <Card className="mb-6">
         <CardContent className="p-4">
-          {viewMode === 'month' && (
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold">
-                  {format(currentMonth, 'MMMM yyyy')}
-                </h2>
-                <div className="flex space-x-2">
-                  <Button 
-                    variant="outline" 
-                    size="icon"
-                    onClick={() => setCurrentMonth(prevMonth => addMonths(prevMonth, -1))}
-                  >
-                    <ArrowLeftIcon className="h-4 w-4" />
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="icon"
-                    onClick={() => setCurrentMonth(prevMonth => addMonths(prevMonth, 1))}
-                  >
-                    <ArrowRightIcon className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-7 gap-1 mb-2 text-center font-medium">
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                  <div key={day} className="p-2">
-                    {day}
-                  </div>
-                ))}
-              </div>
-              
-              <div className="grid grid-cols-7 gap-1 auto-rows-fr">
-                {monthDays.map(day => {
-                  const dayBookings = getBookingsForDay(day);
-                  const dayTimeOffs = getTimeOffsForDay(day);
-                  const isDateSelected = selectedDates.some(d => isSameDay(d, day));
-                  
-                  return (
-                    <div 
-                      key={day.toString()}
-                      className={`min-h-[100px] border rounded-md p-1 
-                        ${!isSameMonth(day, currentMonth) ? 'bg-gray-50 text-gray-400' : ''}
-                        ${isSameDay(day, new Date()) ? 'bg-blue-50 border-blue-200' : ''}
-                        ${isDateSelected ? 'bg-purple-100 border-purple-300' : ''}
-                        ${selectionMode === 'timeOff' ? 'cursor-pointer hover:bg-purple-50' : ''}
-                      `}
-                      onClick={() => {
-                        if (selectionMode === 'timeOff') {
-                          toggleDateSelection(day);
-                        } else if (dayBookings.length > 0) {
-                          setSelectedBooking(dayBookings[0]);
-                        }
-                      }}
-                    >
-                      <div className="font-medium mb-1 text-sm p-1 flex justify-between">
-                        <span>{getDate(day)}</span>
-                        {isDateSelected && (
-                          <span className="bg-purple-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs">
-                            ✓
-                          </span>
-                        )}
-                      </div>
-                      
-                      <div className="overflow-y-auto max-h-[80px]">
-                        {dayBookings.map(booking => (
-                          <div 
-                            key={booking.id}
-                            className={`text-xs p-1 mb-1 rounded truncate ${getStatusColor(booking.status)}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedBooking(booking);
-                            }}
-                          >
-                            {booking.vehicle.model} - {booking.user.name || booking.user.email}
-                          </div>
-                        ))}
-                        
-                        {dayTimeOffs.map(timeOff => (
-                          <div 
-                            key={timeOff.id}
-                            className="text-xs p-1 mb-1 rounded truncate bg-slate-200 text-slate-700"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              // Handle time off click if needed
-                            }}
-                          >
-                            {vehicles.find(v => v.id === timeOff.vehicleId)?.model || 'Vehicle'} - {timeOff.reason}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-          
-          {viewMode === 'agenda' && (
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold mb-4">Upcoming Bookings</h2>
-              
-              {/* Group bookings by date */}
-              {bookings
-                .filter(booking => {
-                  // If a vehicle is selected, only show bookings for that vehicle
-                  return !selectedVehicle || booking.vehicle.id === selectedVehicle.id;
-                })
-                .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
-                .map(booking => (
-                  <div 
-                    key={booking.id} 
-                    className="border rounded-md p-3 cursor-pointer hover:bg-gray-50"
-                    onClick={() => setSelectedBooking(booking)}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-medium">{booking.vehicle.model}</p>
-                        <p className="text-sm text-gray-500">{booking.user.name || booking.user.email}</p>
-                      </div>
-                      <div className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(booking.status)}`}>
-                        {booking.status}
-                      </div>
-                    </div>
-                    
-                    <div className="text-sm mt-2">
-                      <p>{format(parseISO(booking.startDate), 'MMM d, yyyy')} - {format(parseISO(booking.endDate), 'MMM d, yyyy')}</p>
-                      <p className="font-medium mt-1">${booking.totalPrice.toFixed(2)}</p>
-                    </div>
-                  </div>
-                ))}
-              
-              {bookings.length === 0 || (selectedVehicle && bookings.filter(b => b.vehicle.id === selectedVehicle.id).length === 0) && (
-                <p className="text-gray-500 text-center py-4">No bookings found</p>
-              )}
-            </div>
-          )}
+          <div style={{ height: 'calc(80vh - 200px)' }}>
+            <FullCalendar
+              ref={calendarRef}
+              plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
+              initialView={calendarView}
+              headerToolbar={{
+                left: 'prev,next today',
+                center: 'title',
+                right: 'dayGridMonth,listMonth'
+              }}
+              events={calendarEvents}
+              selectable={true}
+              select={handleDateSelect}
+              eventClick={handleEventClick}
+              height="100%"
+              eventTimeFormat={{
+                hour: 'numeric',
+                minute: '2-digit',
+                meridiem: 'short'
+              }}
+              views={{
+                dayGridMonth: {
+                  titleFormat: { year: 'numeric', month: 'long' }
+                },
+                listMonth: {
+                  titleFormat: { year: 'numeric', month: 'long' }
+                }
+              }}
+            />
+          </div>
         </CardContent>
       </Card>
       
@@ -659,7 +888,102 @@ export default function AdminCalendarPage() {
                     <TrashIcon className="h-4 w-4 mr-1" /> Cancel Booking
                   </Button>
                 )}
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="text-red-800 hover:text-red-900"
+                  onClick={() => setDeleteDialogOpen(true)}
+                >
+                  <TrashIcon className="h-4 w-4 mr-1" /> Delete Permanently
+                </Button>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
+      {/* Special Pricing Details Card */}
+      {selectedSpecialPricing && !specialPricingDialogOpen && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Special Pricing Details</CardTitle>
+          </CardHeader>
+          <CardContent className="p-4">
+            <div className="space-y-4">
+              <div className="flex justify-between">
+                <div>
+                  <h3 className="font-medium">{selectedSpecialPricing.name}</h3>
+                                <p className="text-sm text-gray-500">
+                {selectedSpecialPricing.applyToAll 
+                  ? 'Applies to all vehicles' 
+                  : `Applies to ${selectedSpecialPricing.vehicles?.length || 0} vehicles`}
+              </p>
+                </div>
+                <div className={`px-2 py-1 rounded text-xs font-medium ${getSpecialPricingColor(selectedSpecialPricing.priceType)}`}>
+                  {selectedSpecialPricing.priceType === 'multiplier' 
+                    ? `${selectedSpecialPricing.priceValue}x multiplier` 
+                    : `$${selectedSpecialPricing.priceValue} fixed price`}
+                </div>
+              </div>
+              
+              <div className="text-sm">
+                <p>
+                  {format(parseISO(selectedSpecialPricing.startDate), 'MMM d, yyyy')} - {format(parseISO(selectedSpecialPricing.endDate), 'MMM d, yyyy')}
+                </p>
+              </div>
+              
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    // Prefill the form for editing
+                    setSpecialPricingName(selectedSpecialPricing.name);
+                    setPriceType(selectedSpecialPricing.priceType);
+                    setPriceValue(selectedSpecialPricing.priceValue);
+                    setApplyToAllVehicles(selectedSpecialPricing.applyToAll);
+                    
+                    if (!selectedSpecialPricing.applyToAll) {
+                      setSelectedVehiclesForPricing(selectedSpecialPricing.vehicles.map((v: { id: string }) => v.id));
+                    } else {
+                      setSelectedVehiclesForPricing([]);
+                    }
+                    
+                    setDateRange([
+                      new Date(selectedSpecialPricing.startDate), 
+                      new Date(selectedSpecialPricing.endDate)
+                    ]);
+                    
+                    setSpecialPricingDialogOpen(true);
+                  }}
+                >
+                  Edit
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="text-red-800 hover:text-red-900"
+                  onClick={() => setDeleteSpecialPricingDialogOpen(true)}
+                >
+                  <TrashIcon className="h-4 w-4 mr-1" /> Delete
+                </Button>
+              </div>
+              
+              {!selectedSpecialPricing.applyToAll && selectedSpecialPricing.vehicles.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium mb-1">Applied to:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {selectedSpecialPricing.vehicles.map(vehicle => (
+                      <span 
+                        key={vehicle.id} 
+                        className="px-2 py-1 bg-gray-100 rounded-full text-xs"
+                      >
+                        {vehicle.model}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -695,14 +1019,7 @@ export default function AdminCalendarPage() {
       </Dialog>
       
       {/* Add Time Off Dialog */}
-      <Dialog open={timeOffDialogOpen} onOpenChange={(open) => {
-        setTimeOffDialogOpen(open);
-        if (!open) {
-          setSelectionMode('none');
-          setSelectedDates([]);
-          setSelectedVehiclesForTimeOff([]);
-        }
-      }}>
+      <Dialog open={timeOffDialogOpen} onOpenChange={setTimeOffDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Vehicle Time Off</DialogTitle>
@@ -758,68 +1075,33 @@ export default function AdminCalendarPage() {
             </div>
             
             <div>
-              <div className="flex justify-between items-center mb-2">
-                <label className="text-sm font-medium">Dates</label>
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  size="sm"
-                  className={`${selectionMode === 'timeOff' ? 'bg-purple-100' : ''}`}
-                  onClick={() => {
-                    setSelectionMode(prev => prev === 'timeOff' ? 'none' : 'timeOff');
+              <label className="block text-sm font-medium mb-1">Dates</label>
+              <div className="mb-3">
+                <label className="block text-sm font-medium mb-1">Start Date</label>
+                <input 
+                  type="date" 
+                  className="w-full px-3 py-2 border rounded-md"
+                  value={dateRange[0] ? format(dateRange[0], 'yyyy-MM-dd') : ''}
+                  onChange={(e) => {
+                    const date = e.target.value ? new Date(e.target.value) : null;
+                    setDateRange([date, dateRange[1]]);
                   }}
-                >
-                  {selectionMode === 'timeOff' ? 'Finish Selection' : 'Select on Calendar'}
-                </Button>
+                />
               </div>
               
-              {selectionMode === 'timeOff' && selectedDates.length > 0 && (
-                <div className="bg-purple-50 rounded-md p-2 mb-3">
-                  <p className="text-sm">
-                    <span className="font-medium">Selected Dates: </span>
-                    {selectedDates.length} days selected
-                    {selectedDates.length > 0 && (
-                      <>
-                        <br />
-                        From: {format(selectedDates.sort((a, b) => a.getTime() - b.getTime())[0], 'MMM d, yyyy')}
-                        <br />
-                        To: {format(selectedDates.sort((a, b) => a.getTime() - b.getTime())[selectedDates.length - 1], 'MMM d, yyyy')}
-                      </>
-                    )}
-                  </p>
-                </div>
-              )}
-              
-              {(selectionMode !== 'timeOff' || selectedDates.length === 0) && (
-                <>
-                  <div className="mb-3">
-                    <label className="block text-sm font-medium mb-1">Start Date</label>
-                    <input 
-                      type="date" 
-                      className="w-full px-3 py-2 border rounded-md"
-                      value={dateRange[0] ? format(dateRange[0], 'yyyy-MM-dd') : ''}
-                      onChange={(e) => {
-                        const date = e.target.value ? new Date(e.target.value) : null;
-                        setDateRange([date, dateRange[1]]);
-                      }}
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium mb-1">End Date</label>
-                    <input 
-                      type="date" 
-                      className="w-full px-3 py-2 border rounded-md"
-                      value={dateRange[1] ? format(dateRange[1], 'yyyy-MM-dd') : ''}
-                      min={dateRange[0] ? format(dateRange[0], 'yyyy-MM-dd') : ''}
-                      onChange={(e) => {
-                        const date = e.target.value ? new Date(e.target.value) : null;
-                        setDateRange([dateRange[0], date]);
-                      }}
-                    />
-                  </div>
-                </>
-              )}
+              <div>
+                <label className="block text-sm font-medium mb-1">End Date</label>
+                <input 
+                  type="date" 
+                  className="w-full px-3 py-2 border rounded-md"
+                  value={dateRange[1] ? format(dateRange[1], 'yyyy-MM-dd') : ''}
+                  min={dateRange[0] ? format(dateRange[0], 'yyyy-MM-dd') : ''}
+                  onChange={(e) => {
+                    const date = e.target.value ? new Date(e.target.value) : null;
+                    setDateRange([dateRange[0], date]);
+                  }}
+                />
+              </div>
             </div>
             
             <div>
@@ -834,16 +1116,12 @@ export default function AdminCalendarPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setTimeOffDialogOpen(false);
-              setSelectionMode('none');
-              setSelectedDates([]);
-            }}>
+            <Button variant="outline" onClick={() => setTimeOffDialogOpen(false)}>
               Cancel
             </Button>
             <Button 
               disabled={
-                (selectedDates.length === 0 && (!dateRange[0] || !dateRange[1])) || 
+                !dateRange[0] || !dateRange[1] || 
                 !timeOffReason || 
                 selectedVehiclesForTimeOff.length === 0
               } 
@@ -944,6 +1222,300 @@ export default function AdminCalendarPage() {
               onClick={handleCreateBooking}
             >
               Create Booking
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Delete Booking Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Booking Permanently</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to permanently delete this booking? This action cannot be undone and will remove all associated records from the system.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedBooking && (
+            <div className="py-4">
+              <p className="font-medium">{selectedBooking.vehicle.model}</p>
+              <p className="text-sm text-gray-500">{selectedBooking.user.name || selectedBooking.user.email}</p>
+              <p className="text-sm mt-1">
+                {format(parseISO(selectedBooking.startDate), 'MMM d, yyyy')} - {format(parseISO(selectedBooking.endDate), 'MMM d, yyyy')}
+              </p>
+              <p className="text-sm mt-1 font-semibold text-red-600">
+                This will permanently delete the booking from the database.
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              <XIcon className="h-4 w-4 mr-1" /> Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteBooking}>
+              <TrashIcon className="h-4 w-4 mr-1" /> Yes, Delete Permanently
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Special Pricing Dialog */}
+      <Dialog open={specialPricingDialogOpen} onOpenChange={setSpecialPricingDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedSpecialPricing ? 'Edit Special Pricing' : 'Add Special Pricing'}
+            </DialogTitle>
+            <DialogDescription>
+              Set special pricing for specific dates or events.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Name</label>
+              <input
+                type="text"
+                className="w-full px-3 py-2 border rounded-md"
+                placeholder="e.g., Holiday Season, Formula 1 Weekend"
+                value={specialPricingName}
+                onChange={(e) => setSpecialPricingName(e.target.value)}
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium mb-1">Price Type</label>
+              <select
+                className="w-full px-3 py-2 border rounded-md"
+                value={priceType}
+                onChange={(e) => setPriceType(e.target.value as 'multiplier' | 'fixed')}
+              >
+                <option value="multiplier">Multiplier (e.g., 1.5x standard price)</option>
+                <option value="fixed">Fixed Price (override standard price)</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                {priceType === 'multiplier' ? 'Multiplier Value' : 'Fixed Price Value'}
+              </label>
+              <input
+                type="number"
+                min={priceType === 'multiplier' ? 0.1 : 1}
+                step={priceType === 'multiplier' ? 0.1 : 1}
+                className="w-full px-3 py-2 border rounded-md"
+                placeholder={priceType === 'multiplier' ? 'e.g., 1.5' : 'e.g., 200'}
+                value={priceValue}
+                onChange={(e) => setPriceValue(parseFloat(e.target.value))}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                {priceType === 'multiplier' 
+                  ? 'Values above 1 increase price, below 1 decrease price'
+                  : 'Fixed price per day in dollars'}
+              </p>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium mb-1">Date Range</label>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Start Date</label>
+                  <input 
+                    type="date" 
+                    className="w-full px-3 py-2 border rounded-md"
+                    value={dateRange[0] ? format(dateRange[0], 'yyyy-MM-dd') : ''}
+                    onChange={(e) => {
+                      const date = e.target.value ? new Date(e.target.value) : null;
+                      setDateRange([date, dateRange[1]]);
+                    }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">End Date</label>
+                  <input 
+                    type="date" 
+                    className="w-full px-3 py-2 border rounded-md"
+                    value={dateRange[1] ? format(dateRange[1], 'yyyy-MM-dd') : ''}
+                    min={dateRange[0] ? format(dateRange[0], 'yyyy-MM-dd') : ''}
+                    onChange={(e) => {
+                      const date = e.target.value ? new Date(e.target.value) : null;
+                      setDateRange([dateRange[0], date]);
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <div>
+              <div className="flex items-center mb-2">
+                <input
+                  type="checkbox"
+                  id="apply-all-vehicles"
+                  checked={applyToAllVehicles}
+                  onChange={(e) => setApplyToAllVehicles(e.target.checked)}
+                  className="mr-2"
+                />
+                <label htmlFor="apply-all-vehicles" className="text-sm font-medium">
+                  Apply to all vehicles
+                </label>
+              </div>
+              
+              {!applyToAllVehicles && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Select Vehicles</label>
+                  <div className="mb-2">
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      size="sm" 
+                      className="mr-2"
+                      onClick={() => {
+                        if (selectedVehiclesForPricing.length === vehicles.length) {
+                          // If all are selected, deselect all
+                          setSelectedVehiclesForPricing([]);
+                        } else {
+                          // Otherwise select all
+                          setSelectedVehiclesForPricing(vehicles.map(v => v.id));
+                        }
+                      }}
+                    >
+                      {selectedVehiclesForPricing.length === vehicles.length ? 'Deselect All' : 'Select All'}
+                    </Button>
+                  </div>
+                  
+                  <div className="max-h-40 overflow-y-auto border rounded-md p-2">
+                    {vehicles.map(vehicle => (
+                      <div key={vehicle.id} className="flex items-center mb-2">
+                        <input 
+                          type="checkbox"
+                          id={`vehicle-pricing-${vehicle.id}`}
+                          checked={selectedVehiclesForPricing.includes(vehicle.id)}
+                          onChange={() => {
+                            setSelectedVehiclesForPricing(prev => {
+                              if (prev.includes(vehicle.id)) {
+                                return prev.filter(id => id !== vehicle.id);
+                              } else {
+                                return [...prev, vehicle.id];
+                              }
+                            });
+                          }}
+                          className="mr-2"
+                        />
+                        <label htmlFor={`vehicle-pricing-${vehicle.id}`}>{vehicle.model}</label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <div className="flex w-full justify-between">
+              {selectedSpecialPricing && (
+                <Button 
+                  variant="destructive" 
+                  onClick={() => {
+                    setSpecialPricingDialogOpen(false);
+                    setDeleteSpecialPricingDialogOpen(true);
+                  }}
+                >
+                  <TrashIcon className="h-4 w-4 mr-1" /> Delete
+                </Button>
+              )}
+              <div className="flex gap-2 ml-auto">
+                <Button variant="outline" onClick={() => {
+                  setSpecialPricingDialogOpen(false);
+                  if (selectedSpecialPricing) {
+                    setSelectedSpecialPricing(null);
+                  }
+                  resetSpecialPricingForm();
+                }}>
+                  Cancel
+                </Button>
+                <Button 
+                  disabled={
+                    !dateRange[0] || !dateRange[1] || 
+                    !specialPricingName || 
+                    (!applyToAllVehicles && selectedVehiclesForPricing.length === 0)
+                  } 
+                  onClick={async () => {
+                    if (selectedSpecialPricing) {
+                      // Update existing rule
+                      try {
+                        const payload = {
+                          name: specialPricingName,
+                          startDate: format(dateRange[0]!, 'yyyy-MM-dd'),
+                          endDate: format(dateRange[1]!, 'yyyy-MM-dd'),
+                          priceType,
+                          priceValue,
+                          applyToAll: applyToAllVehicles,
+                          vehicleIds: !applyToAllVehicles ? selectedVehiclesForPricing : []
+                        };
+                        
+                        const response = await fetch(`/api/admin/special-pricing/${selectedSpecialPricing.id}`, {
+                          method: 'PATCH',
+                          headers: {
+                            'Content-Type': 'application/json',
+                          },
+                          body: JSON.stringify(payload),
+                        });
+                        
+                        if (!response.ok) {
+                          throw new Error('Failed to update special pricing rule');
+                        }
+                        
+                        // Refresh the data
+                        fetchSpecialPricing();
+                        
+                        // Close the dialog and reset
+                        setSpecialPricingDialogOpen(false);
+                        setSelectedSpecialPricing(null);
+                        resetSpecialPricingForm();
+                      } catch (err) {
+                        console.error('Error updating special pricing rule:', err);
+                        setError('Failed to update special pricing rule');
+                      }
+                    } else {
+                      // Create new rule
+                      handleAddSpecialPricing();
+                    }
+                  }}
+                >
+                  {selectedSpecialPricing ? 'Update' : 'Add Special Pricing'}
+                </Button>
+              </div>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Delete Special Pricing Dialog */}
+      <Dialog open={deleteSpecialPricingDialogOpen} onOpenChange={setDeleteSpecialPricingDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Special Pricing Rule</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this special pricing rule? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedSpecialPricing && (
+            <div className="py-4">
+              <p className="font-medium">{selectedSpecialPricing.name}</p>
+              <p className="text-sm text-gray-500">
+                {format(parseISO(selectedSpecialPricing.startDate), 'MMM d, yyyy')} - {format(parseISO(selectedSpecialPricing.endDate), 'MMM d, yyyy')}
+              </p>
+              <p className="text-sm mt-1">
+                {selectedSpecialPricing.priceType === 'multiplier' 
+                  ? `${selectedSpecialPricing.priceValue}x multiplier` 
+                  : `$${selectedSpecialPricing.priceValue} fixed price`}
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteSpecialPricingDialogOpen(false)}>
+              <XIcon className="h-4 w-4 mr-1" /> Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteSpecialPricing}>
+              <TrashIcon className="h-4 w-4 mr-1" /> Yes, Delete
             </Button>
           </DialogFooter>
         </DialogContent>

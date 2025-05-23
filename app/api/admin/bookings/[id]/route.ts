@@ -19,7 +19,7 @@ async function isAdmin() {
 }
 
 // Get a single booking
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     // Check if user is authenticated and is an admin
     const session = await getServerSession(authOptions);
@@ -31,7 +31,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
       );
     }
     
-    const bookingId = params.id;
+    const resolvedParams = await params;
+    const bookingId = resolvedParams.id;
     
     // Get the booking
     const booking = await prisma.booking.findUnique({
@@ -68,7 +69,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
 }
 
 // Update a booking
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     // Check if user is authenticated and is an admin
     const session = await getServerSession(authOptions);
@@ -80,7 +81,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       );
     }
     
-    const bookingId = params.id;
+    const resolvedParams = await params;
+    const bookingId = resolvedParams.id;
     const data = await request.json();
     
     // Update the booking
@@ -116,7 +118,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 }
 
 // Delete a booking
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     // Check if user is authenticated and is an admin
     const session = await getServerSession(authOptions);
@@ -128,7 +130,8 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
       );
     }
     
-    const bookingId = params.id;
+    const resolvedParams = await params;
+    const bookingId = resolvedParams.id;
     
     // Delete the booking
     await prisma.booking.delete({

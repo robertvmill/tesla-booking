@@ -6,6 +6,7 @@ import prisma from '@/app/lib/prisma';
 /**
  * GET /api/messages
  * Retrieves all messages for the current user, grouped by booking
+ * For admin users, retrieves all messages across all bookings
  */
 export async function GET() {
   try {
@@ -25,40 +26,76 @@ export async function GET() {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
     
-    // Find all bookings for the user
-    const bookings = await prisma.booking.findMany({
-      where: { userId: user.id },
-      include: { 
-        vehicle: true,
-      },
-    });
+    let messages;
     
-    const bookingIds = bookings.map(booking => booking.id);
-    
-    // Get all messages for these bookings, including booking and user details
-    const messages = await prisma.message.findMany({
-      where: {
-        bookingId: { in: bookingIds },
-      },
-      include: {
-        booking: {
-          include: {
-            vehicle: true,
+    // Different query logic for admin users vs regular users
+    if (user.isAdmin) {
+      // Admin users can see all messages from all bookings
+      messages = await prisma.message.findMany({
+        include: {
+          booking: {
+            include: {
+              vehicle: true,
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  image: true,
+                }
+              }
+            },
+          },
+          user: {
+            select: {
+              id: true,
+              name: true,
+              image: true,
+              isAdmin: true,
+            },
           },
         },
-        user: {
-          select: {
-            id: true,
-            name: true,
-            image: true,
-            isAdmin: true,
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+    } else {
+      // Regular users can only see their own messages
+      // Find all bookings for the user
+      const bookings = await prisma.booking.findMany({
+        where: { userId: user.id },
+        include: { 
+          vehicle: true,
+        },
+      });
+      
+      const bookingIds = bookings.map(booking => booking.id);
+      
+      // Get all messages for these bookings, including booking and user details
+      messages = await prisma.message.findMany({
+        where: {
+          bookingId: { in: bookingIds },
+        },
+        include: {
+          booking: {
+            include: {
+              vehicle: true,
+            },
+          },
+          user: {
+            select: {
+              id: true,
+              name: true,
+              image: true,
+              isAdmin: true,
+            },
           },
         },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+    }
     
     return NextResponse.json({ 
       messages: messages.map(message => ({

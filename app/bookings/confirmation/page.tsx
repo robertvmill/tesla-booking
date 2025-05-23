@@ -26,11 +26,47 @@ function ConfirmationContent() {
         
         const data = await response.json();
         setBooking(data.booking);
+        
+        // Create welcome message if it doesn't exist (fallback for development)
+        await ensureWelcomeMessage(data.booking.id);
+        
+        // Trigger a refresh of unread messages count and inbox
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('refreshUnreadCount'));
+        }
       } catch (err) {
         console.error(err);
         setError('Could not load booking details');
       } finally {
         setLoading(false);
+      }
+    }
+
+    // Function to ensure welcome message exists
+    async function ensureWelcomeMessage(bookingId: string) {
+      try {
+        // Check if there are any messages for this booking
+        const messagesResponse = await fetch(`/api/bookings/${bookingId}/messages`);
+        if (messagesResponse.ok) {
+          const messagesData = await messagesResponse.json();
+          
+          // If no messages exist, create a welcome message
+          if (!messagesData.messages || messagesData.messages.length === 0) {
+            await fetch(`/api/bookings/${bookingId}/messages`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                content: `Thank you for choosing RideReady! We're thrilled you'll be experiencing our vehicle. Your reservation has been confirmed. If you have any questions before your trip, feel free to message us here. We look forward to getting you on the road in style!`,
+                isAdminMessage: true
+              }),
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Error ensuring welcome message:', err);
+        // Don't fail the whole page if message creation fails
       }
     }
 
