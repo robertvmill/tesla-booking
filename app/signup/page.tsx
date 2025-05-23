@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, Suspense } from "react"
 import Link from "next/link"
 import { signIn } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -11,7 +11,7 @@ import { Label } from "@/app/components/ui/label"
 import { Checkbox } from "@/app/components/ui/checkbox"
 import { Separator } from "@/app/components/ui/separator"
 
-export default function SignupPage() {
+function SignupContent() {
   const [showPassword, setShowPassword] = useState(false)
   const [firstName, setFirstName] = useState("")
   const [lastName, setLastName] = useState("")
@@ -353,5 +353,19 @@ export default function SignupPage() {
         </div>
       </main>
     </div>
+  )
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex flex-col">
+        <main className="flex-1 flex items-center justify-center p-4 md:p-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
+        </main>
+      </div>
+    }>
+      <SignupContent />
+    </Suspense>
   )
 }

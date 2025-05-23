@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -14,7 +14,7 @@ interface Vehicle {
   image: string;
 }
 
-export default function SearchResults() {
+function SearchContent() {
   const searchParams = useSearchParams();
   const startDate = searchParams.get('startDate');
   const endDate = searchParams.get('endDate');
@@ -128,5 +128,21 @@ export default function SearchResults() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function SearchResults() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 pt-20">
+        <div className="max-w-6xl mx-auto px-4 py-12">
+          <div className="flex justify-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-red-600"></div>
+          </div>
+        </div>
+      </div>
+    }>
+      <SearchContent />
+    </Suspense>
   );
 } 

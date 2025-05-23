@@ -19,7 +19,7 @@
  * - Clear CTAs with red brand color
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -46,7 +46,7 @@ interface Booking {
   userId: string;
 }
 
-export default function ResultsPage() {
+function ResultsContent() {
   const searchParams = useSearchParams();
   const startDate = searchParams.get('startDate');
   const endDate = searchParams.get('endDate');
@@ -170,7 +170,7 @@ export default function ResultsPage() {
                     <h3 className="text-xl font-bold mb-2 text-gray-900">Tesla {vehicle.model}</h3>
                     <p className="text-gray-700 mb-4">{vehicle.description}</p>
                     <div className="flex justify-between items-center mb-4">
-                      <span className="text-lg font-bold text-gray-900">${vehicle.pricePerDay}/day</span>
+                      <span className="text-lg font-bold text-gray-900"></span>
                       <div className="flex space-x-3">
                         <button 
                           onClick={() => toggleVehicleCalendar(vehicle.id)}
@@ -189,14 +189,15 @@ export default function ResultsPage() {
                     </div>
                     
                     {expandedVehicle === vehicle.id && (
-                      <div className="mt-4 border-t pt-4">
+                      <div className="mt-4 border-t pt-4 overflow-x-auto">
                         <h4 className="text-lg font-semibold mb-3">Availability Calendar</h4>
-                        <VehicleAvailabilityCalendar 
-                          vehicleId={vehicle.id} 
-                          bookings={vehicleBookings[vehicle.id] || []}
-                          vehicleModel={vehicle.model}
-                          pricePerDay={vehicle.pricePerDay}
-                        />
+                        <div className="min-w-full">
+                          <VehicleAvailabilityCalendar 
+                            vehicleId={vehicle.id} 
+                            bookings={vehicleBookings[vehicle.id] || []}
+                            vehicleModel={vehicle.model}
+                          />
+                        </div>
                       </div>
                     )}
                   </div>
@@ -217,5 +218,21 @@ export default function ResultsPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function ResultsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 pt-20">
+        <div className="max-w-6xl mx-auto px-4 py-12">
+          <div className="flex justify-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-red-600"></div>
+          </div>
+        </div>
+      </div>
+    }>
+      <ResultsContent />
+    </Suspense>
   );
 }
