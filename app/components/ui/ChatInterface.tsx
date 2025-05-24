@@ -31,11 +31,12 @@ export function ChatInterface({ bookingId }: ChatInterfaceProps) {
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   
   // Scroll to bottom of messages
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (scrollAreaRef.current) {
+      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
+    }
   };
   
   // Fetch messages
@@ -194,7 +195,6 @@ export function ChatInterface({ bookingId }: ChatInterfaceProps) {
                 </div>
               </div>
             ))}
-            <div ref={messagesEndRef} />
           </div>
         )}
       </div>

@@ -4,7 +4,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useEffect } from 'react';
-import { BookOpenCheck, Car, Users, Settings, Calendar } from 'lucide-react';
+import { BookOpenCheck, Car, Users, Settings, Calendar, Percent } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 
@@ -116,6 +116,22 @@ export default function AdminDashboard() {
           <CardFooter>
             <Link href="/admin/settings" className="w-full">
               <Button variant="default" className="w-full">Site Settings</Button>
+            </Link>
+          </CardFooter>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <Percent className="h-8 w-8 text-red-500 mb-2" />
+            <CardTitle>Duration Discounts</CardTitle>
+            <CardDescription>Manage discounts for longer bookings</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-gray-500">Set up discounts for bookings longer than 3 days, a week, 2 weeks, or a month.</p>
+          </CardContent>
+          <CardFooter>
+            <Link href="/admin/duration-discounts" className="w-full">
+              <Button variant="default" className="w-full">Manage Discounts</Button>
             </Link>
           </CardFooter>
         </Card>

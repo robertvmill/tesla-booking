@@ -186,8 +186,8 @@ export default function BookingDetailsPage({ params }: { params: { id: string } 
             <CardDescription>Booking Reference: {booking.id.substring(0, 8)}</CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="flex flex-wrap">
-              <div className="w-1/2 pr-2">
+            <div className="flex flex-col md:flex-row">
+              <div className="md:w-1/2 md:pr-2 mb-4 md:mb-0">
                 <div className="space-y-2">
                   <div className="flex items-center text-sm">
                     <CalendarIcon className="mr-2 h-3 w-3 opacity-70" />
@@ -211,7 +211,7 @@ export default function BookingDetailsPage({ params }: { params: { id: string } 
               </div>
               
               {booking.vehicle.image && (
-                <div className="w-1/2 pl-2">
+                <div className="md:w-1/2 md:pl-2">
                   <img 
                     src={booking.vehicle.image} 
                     alt={booking.vehicle.model} 

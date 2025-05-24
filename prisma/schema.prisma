@@ -21,6 +21,7 @@ model Vehicle {
   updatedAt     DateTime         @updatedAt
   bookings      Booking[]
   specialPrices SpecialPricing[] @relation("SpecialPricingToVehicle")
+  durationDiscounts DurationDiscount[] @relation("DurationDiscountToVehicle")
 }
 
 model User {
@@ -112,4 +113,17 @@ model SpecialPricing {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
   vehicles   Vehicle[] @relation("SpecialPricingToVehicle")
+}
+
+model DurationDiscount {
+  id            String    @id @default(uuid())
+  name          String
+  durationType  String    // '3_days' | 'week' | '2_weeks' | 'month'
+  discountType  String    // 'percentage' | 'fixed_amount'
+  discountValue Float
+  applyToAll    Boolean   @default(false)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  vehicles      Vehicle[] @relation("DurationDiscountToVehicle")
 }

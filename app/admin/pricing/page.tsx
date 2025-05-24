@@ -16,11 +16,6 @@ import {
   DialogTitle,
 } from "@/app/components/ui/dialog";
 
-interface Vehicle {
-  id: string;
-  model: string;
-}
-
 interface SpecialPricing {
   id: string;
   name: string;
@@ -39,7 +34,6 @@ export default function AdminPricingPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [specialPricingRules, setSpecialPricingRules] = useState<SpecialPricing[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [error, setError] = useState<string | null>(null);
   
   // Deletion state
@@ -54,7 +48,7 @@ export default function AdminPricingPage() {
     }
     
     // Check if user is an admin
-    const isAdmin = session?.user ? (session.user as any).isAdmin : false;
+    const isAdmin = session?.user ? (session.user as { isAdmin?: boolean }).isAdmin : false;
     if (status === 'authenticated' && !isAdmin) {
       router.push('/');
       return;
@@ -63,7 +57,6 @@ export default function AdminPricingPage() {
     // Fetch data if authenticated and admin
     if (status === 'authenticated' && isAdmin) {
       fetchSpecialPricing();
-      fetchVehicles();
     }
   }, [status, session, router]);
 
@@ -83,22 +76,6 @@ export default function AdminPricingPage() {
       setError('Failed to load special pricing rules. Please try again later.');
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const fetchVehicles = async () => {
-    try {
-      const response = await fetch('/api/admin/vehicles');
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch vehicles');
-      }
-      
-      const data = await response.json();
-      setVehicles(data.vehicles || []);
-    } catch (err) {
-      console.error('Error fetching vehicles:', err);
-      // Don't set an error, just use empty state
     }
   };
 

@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Calendar } from '../../components/ui/calendar';
-import { type SelectRangeEventHandler, type DateRange } from 'react-day-picker';
+import { useState, useEffect, useMemo } from 'react';
+import { addDays, format, isSameDay, isWithinInterval, startOfDay, isBefore, differenceInDays, eachDayOfInterval, startOfMonth, endOfMonth, addMonths, isAfter, isSameMonth } from 'date-fns';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Booking } from '@prisma/client';
-import { addDays, format, isSameDay, isWithinInterval, startOfDay, isBefore, differenceInDays, eachDayOfInterval, startOfMonth, endOfMonth } from 'date-fns';
 import { cn } from '../../../lib/utils';
 import { useRouter } from 'next/navigation';
 
@@ -26,20 +25,15 @@ export default function VehicleAvailabilityCalendar({
   vehicleId, 
   bookings, 
   vehicleModel = "Vehicle", 
-  pricePerDay = 5 
+  pricePerDay = 200 
 }: VehicleAvailabilityCalendarProps) {
   const router = useRouter();
-  const [dateRange, setDateRange] = useState<DateRange>({
-    from: undefined,
-    to: undefined
-  });
-  const [hoveredBooking, setHoveredBooking] = useState<Booking | null>(null);
-  const [totalPrice, setTotalPrice] = useState<number>(0);
-  // Keep track of daily prices
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [checkInDate, setCheckInDate] = useState<Date | null>(null);
+  const [checkOutDate, setCheckOutDate] = useState<Date | null>(null);
+  const [hoveredDate, setHoveredDate] = useState<Date | null>(null);
   const [dailyPrices, setDailyPrices] = useState<Map<string, DailyPrice>>(new Map());
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  // Add current display month state
-  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
 
   // Function to check if a date is booked
   const isDateBooked = (date: Date) => {
@@ -50,20 +44,7 @@ export default function VehicleAvailabilityCalendar({
       return isWithinInterval(date, {
         start: bookingStart,
         end: bookingEnd,
-      }) && booking.status === 'confirmed'; // Only confirmed bookings block dates
-    });
-  };
-
-  // Function to get all bookings for a specific date
-  const getBookingsForDate = (date: Date) => {
-    return bookings.filter((booking) => {
-      const bookingStart = startOfDay(new Date(booking.startDate));
-      const bookingEnd = startOfDay(new Date(booking.endDate));
-      
-      return isWithinInterval(date, {
-        start: bookingStart,
-        end: bookingEnd,
-      }) && booking.status === 'confirmed'; // Only show confirmed bookings
+      }) && booking.status === 'confirmed';
     });
   };
 
@@ -79,19 +60,85 @@ export default function VehicleAvailabilityCalendar({
     return dailyPrices.has(dateKey) ? dailyPrices.get(dateKey)!.isSpecialPrice : false;
   };
 
+  // Calculate total price
+  const totalPrice = useMemo(() => {
+    if (!checkInDate || !checkOutDate) return 0;
+    let sum = 0;
+    const days = eachDayOfInterval({ start: checkInDate, end: checkOutDate });
+    
+    days.forEach(day => {
+      const price = getPriceForDate(day);
+      sum += price;
+    });
+    
+    return sum;
+  }, [checkInDate, checkOutDate, dailyPrices]);
+
+  // Handle date click
+  const handleDateClick = (date: Date) => {
+    if (isDateBooked(date) || isBefore(date, new Date())) return;
+
+    if (!checkInDate || (checkInDate && checkOutDate)) {
+      // Start new selection
+      setCheckInDate(date);
+      setCheckOutDate(null);
+    } else if (isBefore(date, checkInDate)) {
+      // If clicked date is before check-in, reset selection
+      setCheckInDate(date);
+      setCheckOutDate(null);
+    } else {
+      // Set check-out date
+      setCheckOutDate(date);
+    }
+  };
+
+  // Check if date is in range (including hover effect)
+  const isDateInRange = (date: Date) => {
+    if (!checkInDate) return false;
+    
+    if (!checkOutDate && hoveredDate && isAfter(hoveredDate, checkInDate)) {
+      return (
+        (isAfter(date, checkInDate) && isBefore(date, hoveredDate)) ||
+        isSameDay(date, checkInDate) ||
+        isSameDay(date, hoveredDate)
+      );
+    }
+    
+    if (checkOutDate) {
+      return (
+        (isAfter(date, checkInDate) && isBefore(date, checkOutDate)) ||
+        isSameDay(date, checkInDate) ||
+        isSameDay(date, checkOutDate)
+      );
+    }
+    
+    return isSameDay(date, checkInDate);
+  };
+
+  // Check if date is disabled
+  const isDateDisabled = (date: Date) => {
+    return isBefore(date, new Date()) || isDateBooked(date);
+  };
+
+  // Navigation functions
+  const navigateMonth = (direction: "prev" | "next") => {
+    setCurrentMonth((prev) => addMonths(prev, direction === "next" ? 1 : -1));
+  };
+
+  const clearDates = () => {
+    setCheckInDate(null);
+    setCheckOutDate(null);
+  };
+
   // Fetch pricing data for an entire month
   const fetchMonthPricing = async (month: Date) => {
     setIsLoading(true);
     try {
-      // Get first and last day of the month
       const firstDay = startOfMonth(month);
       const lastDay = endOfMonth(month);
-      
-      // Create a date range to fetch
       const from = format(firstDay, 'yyyy-MM-dd');
       const to = format(lastDay, 'yyyy-MM-dd');
       
-      // Fetch availability data from API
       const response = await fetch(`/api/availability?startDate=${from}&endDate=${to}`);
       if (!response.ok) {
         throw new Error('Failed to fetch availability');
@@ -100,16 +147,12 @@ export default function VehicleAvailabilityCalendar({
       const data = await response.json();
       const vehicleData = data.availableVehicles.find((v: {id: string}) => v.id === vehicleId);
       
-      // Create a new daily prices map
       const newPrices = new Map<string, DailyPrice>();
       
       if (vehicleData) {
-        // Get all days in the month
         const days = eachDayOfInterval({ start: firstDay, end: lastDay });
         
-        // Check if special pricing data is available per day
         if (vehicleData.dailyPrices) {
-          // API returned daily prices
           vehicleData.dailyPrices.forEach((dayData: {date: string, price: number, isSpecialPrice: boolean}) => {
             newPrices.set(dayData.date, {
               date: new Date(dayData.date),
@@ -118,7 +161,6 @@ export default function VehicleAvailabilityCalendar({
             });
           });
         } else if (vehicleData.hasSpecialPricing) {
-          // Uniform special pricing
           const dayPrice = vehicleData.adjustedPricePerDay || pricePerDay;
           days.forEach(day => {
             const dateKey = format(day, 'yyyy-MM-dd');
@@ -129,7 +171,6 @@ export default function VehicleAvailabilityCalendar({
             });
           });
         } else {
-          // Regular pricing for all days
           days.forEach(day => {
             const dateKey = format(day, 'yyyy-MM-dd');
             newPrices.set(dateKey, {
@@ -141,7 +182,6 @@ export default function VehicleAvailabilityCalendar({
         }
       }
       
-      // Merge with existing prices (to keep previously fetched months)
       setDailyPrices(prevPrices => {
         const merged = new Map(prevPrices);
         newPrices.forEach((value, key) => {
@@ -156,229 +196,245 @@ export default function VehicleAvailabilityCalendar({
     }
   };
 
-  // Calculate total price for selected date range
-  useEffect(() => {
-    if (dateRange.from && dateRange.to) {
-      let sum = 0;
-      const days = eachDayOfInterval({ start: dateRange.from, end: dateRange.to });
-      
-      days.forEach(day => {
-        const price = getPriceForDate(day);
-        sum += price;
-      });
-      
-      setTotalPrice(sum);
-    } else {
-      setTotalPrice(0);
-    }
-  }, [dateRange, dailyPrices]);
-
   // Load pricing data when component mounts or month changes
   useEffect(() => {
     fetchMonthPricing(currentMonth);
+    // Also fetch next month for dual display
+    const nextMonth = addMonths(currentMonth, 1);
+    fetchMonthPricing(nextMonth);
   }, [currentMonth, vehicleId, pricePerDay]);
 
-  // Handle month navigation
-  const handleMonthChange = (month: Date) => {
-    setCurrentMonth(month);
-  };
+  // Helper function to render calendar days
+  const renderCalendarDays = (monthOffset: number = 0) => {
+    const targetMonth = addMonths(currentMonth, monthOffset);
+    const monthStart = startOfMonth(targetMonth);
+    const monthEnd = endOfMonth(targetMonth);
+    const startDate = monthStart;
+    const endDate = monthEnd;
 
-  // Check if a date range has any conflicts with existing bookings
-  const hasDateRangeConflicts = (from: Date, to: Date) => {
-    // Check each day in the range for conflicts
-    let currentDate = startOfDay(new Date(from));
-    const endDate = startOfDay(new Date(to));
-    
-    while (isBefore(currentDate, endDate) || isSameDay(currentDate, endDate)) {
-      if (isDateBooked(currentDate)) {
-        return true;
-      }
-      currentDate = addDays(currentDate, 1);
+    const dateFormat = "d";
+    const rows = [];
+    let days = [];
+    let day = startDate;
+    let formattedDate = "";
+
+    // Add empty cells for days before month start
+    const startDay = day.getDay();
+    for (let i = 0; i < startDay; i++) {
+      days.push(<div key={`empty-${i}`} className="aspect-square" />);
     }
-    
-    return false;
-  };
 
-  // Handle date range selection
-  const handleSelect: SelectRangeEventHandler = (range) => {
-    if (range) {
-      setDateRange({
-        from: range.from,
-        to: range.to
-      });
-    }
-  };
+    while (day <= endDate) {
+      formattedDate = format(day, dateFormat);
+      const cloneDay = day;
+      const isDisabled = isDateDisabled(cloneDay);
+      const isInRange = isDateInRange(cloneDay);
+      const isCheckIn = checkInDate && isSameDay(cloneDay, checkInDate);
+      const isCheckOut = checkOutDate && isSameDay(cloneDay, checkOutDate);
+      const isToday = isSameDay(cloneDay, new Date());
+      const price = getPriceForDate(cloneDay);
+      const isSpecial = hasSpecialPricing(cloneDay);
 
-  // Main render function that returns the calendar UI
-  return (
-    // Adjust grid layout to give more space to the calendar column
-    <div className="grid lg:grid-cols-[3fr_2fr] md:grid-cols-1 sm:grid-cols-1 gap-4 md:gap-6 lg:gap-8">
-      {/* Left column containing the calendar */}
-      <div className="w-full">
-        {/* Calendar component with range selection mode */}
-        <Calendar
-          mode="range"
-          selected={dateRange}
-          onSelect={handleSelect}
-          className="rounded-md border w-full text-sm md:text-base lg:text-lg"
-          onMonthChange={handleMonthChange}
-          // Custom styling classes for calendar elements
-          classNames={{
-            months: "flex flex-col space-y-4 sm:space-y-0 sm:space-x-4",
-            month: "space-y-2 md:space-y-4 w-full",
-            caption: "flex justify-center pt-1 relative items-center px-4 md:px-6",
-            caption_label: "text-lg md:text-xl font-bold",
-            nav: "space-x-1 flex items-center",
-            nav_button: "h-7 w-7 md:h-9 md:w-9 bg-transparent p-0 hover:opacity-70",
-            table: "w-full border-collapse",
-            head_row: "flex w-full",
-            head_cell: "rounded-md w-full font-semibold text-gray-500 h-8 md:h-10 flex items-center justify-center text-xs md:text-sm",
-            row: "flex w-full mt-1 md:mt-2",
-            cell: "relative p-0 text-center text-xs md:text-sm hover:bg-gray-100 rounded-md h-10 md:h-14 w-full flex justify-center items-center focus-within:relative focus-within:z-20",
-            day: "h-8 w-8 md:h-10 md:w-10 lg:h-12 lg:w-12 p-0 font-semibold flex items-center justify-center rounded-full hover:bg-gray-200 aria-selected:opacity-100",
-            day_selected: "bg-blue-100 text-blue-800",
-            day_today: "bg-gray-100 text-gray-900",
-            day_outside: "opacity-50",
-            day_disabled: "opacity-50 line-through",
-            day_range_middle: "rounded-none",
-            day_hidden: "invisible",
-          }}
-          // Custom modifiers for special date states
-          modifiers={{
-            booked: (date) => isDateBooked(date),
-            selected: (date) => {
-              // Mark single selected date
-              if (dateRange.from && !dateRange.to && isSameDay(date, dateRange.from)) {
-                return true;
-              }
-              // Mark date range
-              if (dateRange.from && dateRange.to) {
-                return isWithinInterval(date, {
-                  start: dateRange.from,
-                  end: dateRange.to
-                });
-              }
-              return false;
-            }
-          }}
-          // Classes for modified dates
-          modifiersClassNames={{
-            booked: "bg-red-100 text-red-800",
-            selected: "bg-blue-100 text-blue-800"
-          }}
-          // Custom day cell rendering
-          components={{
-            DayContent: ({ date: dayDate }) => {
-              const isBooked = isDateBooked(dayDate);
-              const price = getPriceForDate(dayDate);
-              const isSpecial = hasSpecialPricing(dayDate);
-              
-              return (
-                <div
-                  className={cn(
-                    "w-full h-full flex flex-col items-center justify-center",
-                    isBooked && "relative"
-                  )}
-                  onMouseEnter={() => {
-                    if (isBooked) {
-                      const bookingsForDay = getBookingsForDate(dayDate);
-                      if (bookingsForDay.length > 0) {
-                        setHoveredBooking(bookingsForDay[0]);
-                      }
-                    }
-                  }}
-                  onMouseLeave={() => setHoveredBooking(null)}
-                >
-                  <span className="text-xs sm:text-sm md:text-base">{format(dayDate, "d")}</span>
-                  {!isBooked && (
-                    <span className={cn(
-                      "text-[8px] sm:text-[10px] md:text-[11px] font-medium",
-                      isSpecial ? "text-green-700" : "text-gray-500"
-                    )}>
-                      ${price}
-                    </span>
-                  )}
-                  {isBooked && (
-                    <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2 w-1 h-1 sm:w-1.5 sm:h-1.5 bg-red-600 rounded-full" />
-                  )}
-                </div>
-              );
-            },
-          }}
-        />
-        
-        {/* Calendar legend showing different date states */}
-        <div className="mt-2 md:mt-4 flex flex-wrap items-center gap-2 md:gap-3 text-xs">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-red-100 rounded-full"></div>
-            <span className="text-xs">Booked</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-blue-100 rounded-full"></div>
-            <span className="text-xs">Selected</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-white border rounded-full"></div>
-            <span className="text-xs">Available</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 border border-green-700 rounded-full flex items-center justify-center">
-              <span className="text-[6px] text-green-700 font-bold">$</span>
+      days.push(
+        <div key={day.toString()} className="aspect-square relative">
+          <button
+            onClick={() => handleDateClick(cloneDay)}
+            onMouseEnter={() => checkInDate && !checkOutDate && setHoveredDate(cloneDay)}
+            onMouseLeave={() => setHoveredDate(null)}
+            disabled={isDisabled}
+            className={cn(
+              "w-full h-full flex items-center justify-center text-sm transition-all duration-200 relative z-10",
+              isDisabled 
+                ? "text-gray-300 cursor-not-allowed" 
+                : "hover:bg-gray-100 cursor-pointer text-gray-900",
+              isToday && !isCheckIn && !isCheckOut && "bg-blue-100 text-blue-900 font-semibold",
+              isInRange && !isCheckIn && !isCheckOut && "bg-red-50 text-red-900",
+              (isCheckIn || isCheckOut) && "bg-red-600 text-white font-semibold rounded-md",
+              isInRange && "relative"
+            )}
+          >
+            {formattedDate}
+          </button>
+          
+          {/* Price display */}
+          {!isDisabled && (
+            <div className="absolute -bottom-1 left-0 right-0 flex justify-center pointer-events-none z-30">
+              <span 
+                className={cn(
+                  "text-[10px] leading-none px-1 py-0.5 rounded",
+                  isSpecial ? "text-green-600 font-semibold bg-white/90" : "text-gray-500 bg-white/90"
+                )}
+              >
+                ${price}
+              </span>
             </div>
-            <span className="text-xs">Special Pricing</span>
+          )}
+          
+          {/* Range background */}
+          {isInRange && !isCheckIn && !isCheckOut && (
+            <div className="absolute inset-0 bg-red-50 -z-10" />
+          )}
+        </div>
+      );
+
+      if (days.length === 7) {
+        rows.push(<div key={day.toString()} className="grid grid-cols-7 gap-1">{days}</div>);
+        days = [];
+      }
+      day = addDays(day, 1);
+    }
+
+    if (days.length > 0) {
+      rows.push(<div key={day.toString()} className="grid grid-cols-7 gap-1">{days}</div>);
+    }
+
+    return rows;
+  };
+
+  return (
+    <div className="grid lg:grid-cols-[3fr_2fr] md:grid-cols-1 sm:grid-cols-1 gap-4 md:gap-6 lg:gap-8">
+      {/* Left column - Calendar Component */}
+      <div className="w-full">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+          <div className="text-center space-y-2 mb-6">
+            <h2 className="text-xl font-semibold text-gray-900">When would you like to book?</h2>
+            <p className="text-gray-600">Select your pickup and return dates</p>
+          </div>
+
+          {/* Date Selection Display */}
+          <div className="grid grid-cols-2 gap-2 mb-6">
+            <div className="border border-gray-300 rounded-l-lg p-3">
+              <p className="text-xs font-semibold text-gray-700 uppercase">Pickup</p>
+              <p className="text-sm">{checkInDate ? format(checkInDate, "MMM d, yyyy") : "Add date"}</p>
+            </div>
+            <div className="border border-gray-300 rounded-r-lg p-3">
+              <p className="text-xs font-semibold text-gray-700 uppercase">Return</p>
+              <p className="text-sm">{checkOutDate ? format(checkOutDate, "MMM d, yyyy") : "Add date"}</p>
+            </div>
+          </div>
+
+          {/* Calendar Navigation */}
+          <div className="flex items-center justify-between mb-6">
+            <button
+              onClick={() => navigateMonth("prev")}
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              disabled={isSameMonth(currentMonth, new Date())}
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <div className="flex flex-col sm:flex-row sm:gap-8 gap-2 items-center">
+              <h4 className="text-sm font-semibold">{format(currentMonth, "MMMM yyyy")}</h4>
+              <h4 className="text-sm font-semibold hidden sm:block">{format(addMonths(currentMonth, 1), "MMMM yyyy")}</h4>
+            </div>
+            <button 
+              onClick={() => navigateMonth("next")} 
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Calendar Grid */}
+          <div className="flex flex-col sm:flex-row sm:gap-8 justify-center mb-6 gap-4">
+            {/* First Month */}
+            <div className="space-y-2 flex-1">
+              {/* Month title for mobile */}
+              <h4 className="text-sm font-semibold text-center sm:hidden">{format(currentMonth, "MMMM yyyy")}</h4>
+              {/* Day headers */}
+              <div className="grid grid-cols-7 gap-1">
+                {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
+                  <div key={day} className="h-6 flex items-center justify-center text-xs text-gray-500 font-medium">
+                    {day}
+                  </div>
+                ))}
+              </div>
+              {/* Calendar days */}
+              <div className="space-y-1">
+                {renderCalendarDays(0)}
+              </div>
+            </div>
+
+            {/* Second Month */}
+            <div className="space-y-2 flex-1">
+              {/* Month title for mobile */}
+              <h4 className="text-sm font-semibold text-center sm:hidden">{format(addMonths(currentMonth, 1), "MMMM yyyy")}</h4>
+              {/* Day headers */}
+              <div className="grid grid-cols-7 gap-1">
+                {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
+                  <div key={day} className="h-6 flex items-center justify-center text-xs text-gray-500 font-medium">
+                    {day}
+                  </div>
+                ))}
+              </div>
+              {/* Calendar days */}
+              <div className="space-y-1">
+                {renderCalendarDays(1)}
+              </div>
+            </div>
+          </div>
+
+          {/* Clear dates button */}
+          {(checkInDate || checkOutDate) && (
+            <div className="flex justify-center mb-4">
+              <button onClick={clearDates} className="text-sm text-gray-600 underline hover:text-gray-800">
+                Clear dates
+              </button>
+            </div>
+          )}
+
+          {/* Calendar legend */}
+          <div className="flex flex-wrap items-center gap-4 text-sm bg-gray-50 p-3 rounded-lg">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-red-50 border border-red-200 rounded"></div>
+              <span className="text-sm text-gray-700">Booked</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-red-600 rounded"></div>
+              <span className="text-sm text-gray-700">Selected</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-white border border-gray-300 rounded"></div>
+              <span className="text-sm text-gray-700">Available</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-green-50 border border-green-200 rounded flex items-center justify-center">
+                <span className="text-[8px] text-green-600 font-bold">*</span>
+              </div>
+              <span className="text-sm text-gray-700">Special Pricing</span>
+            </div>
           </div>
         </div>
-        
-        {/* Booking info popup on hover */}
-        {hoveredBooking && (
-          <div className="mt-4 p-3 bg-gray-50 border rounded-md text-sm">
-            <p className="font-semibold">Booking Info:</p>
-            <p>Vehicle: {vehicleModel}</p>
-            <p>Dates: {format(new Date(hoveredBooking.startDate), 'MMM d')} - {format(new Date(hoveredBooking.endDate), 'MMM d, yyyy')}</p>
-            <p>Status: <span className="capitalize">{hoveredBooking.status}</span></p>
-          </div>
-        )}
       </div>
 
-      {/* Right column containing booking details and instructions */}
+      {/* Right column - Booking Details */}
       <div className="w-full">
-        {/* Selected date range header */}
         <h3 className="text-lg md:text-xl font-semibold mb-3 md:mb-5">
-          {dateRange.from ? (
-            dateRange.to ? (
+          {checkInDate ? (
+            checkOutDate ? (
               <>
-                {format(dateRange.from, 'MMMM d, yyyy')} - {format(dateRange.to, 'MMMM d, yyyy')}
+                {format(checkInDate, 'MMMM d, yyyy')} - {format(checkOutDate, 'MMMM d, yyyy')}
                 <p className="text-xs md:text-sm text-gray-600 mt-1">
-                  {differenceInDays(dateRange.to, dateRange.from) + 1} days
+                  {differenceInDays(checkOutDate, checkInDate)} days
                 </p>
               </>
             ) : (
               <>
-                {format(dateRange.from, 'MMMM d, yyyy')}
-                <p className="text-xs md:text-sm text-gray-600 mt-1">Select end date</p>
+                {format(checkInDate, 'MMMM d, yyyy')}
+                <p className="text-xs md:text-sm text-gray-600 mt-1">Select return date</p>
               </>
             )
           ) : (
             <>
               Select dates
-              <p className="text-xs md:text-sm text-gray-600 mt-1">Click to select start date</p>
+              <p className="text-xs md:text-sm text-gray-600 mt-1">Click to select pickup date</p>
             </>
           )}
         </h3>
         
         {/* Booking status and summary section */}
-        {dateRange.from && (
+        {checkInDate && (
           <>
-            {dateRange.to && hasDateRangeConflicts(dateRange.from, dateRange.to) ? (
-              // Show error if dates conflict with existing bookings
-              <div className="bg-red-50 p-3 md:p-5 rounded-md text-sm md:text-base">
-                <p className="text-red-800 mb-2 text-base md:text-lg font-medium">Some dates in your selection are already booked.</p>
-                <p className="text-gray-700">
-                  Please adjust your date range to avoid conflicts with existing bookings.
-                </p>
-              </div>
-            ) : dateRange.to ? (
-              // Show booking summary if dates are valid
+            {checkOutDate ? (
               <div className="bg-green-50 p-3 md:p-5 rounded-md">
                 <p className="text-green-800 mb-2 md:mb-3 text-base md:text-lg font-medium">This {vehicleModel} is available for your selected dates!</p>
                 <div className="mt-2 md:mt-4 mb-2 md:mb-3">
@@ -387,9 +443,8 @@ export default function VehicleAvailabilityCalendar({
                     <p className="text-gray-700 text-sm md:text-base">Calculating price...</p>
                   ) : (
                     <div>
-                      {/* Daily price breakdown */}
                       <div className="text-sm md:text-base mt-2 md:mt-3 mb-2 md:mb-3 max-h-32 md:max-h-40 overflow-y-auto">
-                        {dateRange.from && dateRange.to && eachDayOfInterval({ start: dateRange.from, end: dateRange.to }).map(day => (
+                        {checkInDate && checkOutDate && eachDayOfInterval({ start: checkInDate, end: checkOutDate }).map(day => (
                           <div key={format(day, 'yyyy-MM-dd')} className="flex justify-between text-gray-700 py-1">
                             <span>{format(day, 'MMM d')}</span>
                             <span className={cn(hasSpecialPricing(day) ? "text-green-700 font-medium" : "")}>
@@ -402,14 +457,13 @@ export default function VehicleAvailabilityCalendar({
                     </div>
                   )}
                 </div>
-                {/* Proceed to booking button */}
                 <button 
                   onClick={() => {
-                    if (dateRange.from && dateRange.to) {
-                      router.push(`/booking?vehicleId=${vehicleId}&from=${format(dateRange.from, 'yyyy-MM-dd')}&to=${format(dateRange.to, 'yyyy-MM-dd')}`);
+                    if (checkInDate && checkOutDate) {
+                      router.push(`/booking?vehicleId=${vehicleId}&from=${format(checkInDate, 'yyyy-MM-dd')}&to=${format(checkOutDate, 'yyyy-MM-dd')}`);
                     }
                   }}
-                  className="bg-red-600 hover:bg-red-700 text-white py-2 md:py-3 px-4 md:px-6 rounded-md text-sm md:text-base w-full"
+                  className="bg-red-600 hover:bg-red-700 text-white py-2 md:py-3 px-4 md:px-6 rounded-md text-sm md:text-base w-full transition-colors"
                 >
                   Proceed to Booking
                 </button>
@@ -425,13 +479,13 @@ export default function VehicleAvailabilityCalendar({
         <div className="mt-6 md:mt-8">
           <h4 className="font-semibold mb-3 text-base md:text-lg">Booking Instructions</h4>
           <ol className="text-gray-700 mb-4 list-decimal pl-5 space-y-1 md:space-y-2 text-sm md:text-base">
-            <li>Select your check-in date first</li>
-            <li>Then select your check-out date</li>
+            <li>Select your pickup date first</li>
+            <li>Then select your return date</li>
             <li>Review the booking summary</li>
             <li>Click &ldquo;Proceed to Booking&rdquo; to confirm</li>
           </ol>
           <p className="text-xs md:text-sm text-gray-500 mt-3">
-            Note: Red dates are unavailable due to existing bookings. Green prices indicate special event pricing.
+            Note: Gray dates are unavailable due to existing bookings. Green prices indicate special event pricing.
           </p>
         </div>
       </div>
