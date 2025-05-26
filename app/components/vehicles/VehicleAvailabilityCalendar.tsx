@@ -436,19 +436,19 @@ export default function VehicleAvailabilityCalendar({
           </div>
 
           {/* Date Selection Display */}
-          <div className="grid grid-cols-2 gap-2 mb-6">
-            <div className="border border-gray-300 rounded-l-lg p-3">
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            <div className="border border-gray-300 rounded-l-lg p-2">
               <p className="text-xs font-semibold text-gray-700 uppercase">Pickup</p>
               <p className="text-sm">{checkInDate ? format(checkInDate, "MMM d, yyyy") : "Add date"}</p>
             </div>
-            <div className="border border-gray-300 rounded-r-lg p-3">
+            <div className="border border-gray-300 rounded-r-lg p-2">
               <p className="text-xs font-semibold text-gray-700 uppercase">Return</p>
               <p className="text-sm">{checkOutDate ? format(checkOutDate, "MMM d, yyyy") : "Add date"}</p>
             </div>
           </div>
 
           {/* Calendar Navigation */}
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-4">
             <button
               onClick={() => navigateMonth("prev")}
               className="p-2 hover:bg-gray-100 rounded-full transition-colors"
@@ -456,7 +456,7 @@ export default function VehicleAvailabilityCalendar({
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <div className="flex flex-col sm:flex-row sm:gap-8 gap-2 items-center">
+            <div className="flex flex-col sm:flex-row sm:gap-6 gap-1 items-center">
               <h4 className="text-sm font-semibold">{format(currentMonth, "MMMM yyyy")}</h4>
               <h4 className="text-sm font-semibold hidden sm:block">{format(addMonths(currentMonth, 1), "MMMM yyyy")}</h4>
             </div>
@@ -469,7 +469,7 @@ export default function VehicleAvailabilityCalendar({
           </div>
 
           {/* Calendar Grid */}
-          <div className="flex flex-col sm:flex-row sm:gap-8 justify-center mb-6 gap-4">
+          <div className="flex flex-col sm:flex-row sm:gap-6 justify-center mb-4 gap-3">
             {/* First Month */}
             <div className="space-y-2 flex-1">
               {/* Month title for mobile */}
@@ -509,7 +509,7 @@ export default function VehicleAvailabilityCalendar({
 
           {/* Clear dates button */}
           {(checkInDate || checkOutDate) && (
-            <div className="flex justify-center mb-4">
+            <div className="flex justify-center mb-3">
               <button onClick={clearDates} className="text-sm text-gray-600 underline hover:text-gray-800">
                 Clear dates
               </button>
@@ -517,7 +517,7 @@ export default function VehicleAvailabilityCalendar({
           )}
 
           {/* Calendar legend */}
-          <div className="flex flex-wrap items-center gap-4 text-sm bg-gray-50 p-3 rounded-lg">
+          <div className="flex flex-wrap items-center gap-3 text-sm bg-gray-50 p-2 rounded-lg">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 bg-red-50 border border-red-200 rounded"></div>
               <span className="text-sm text-gray-700">Booked</span>
@@ -542,7 +542,7 @@ export default function VehicleAvailabilityCalendar({
 
       {/* Right column - Booking Details */}
       <div className="w-full">
-        <h3 className="text-lg md:text-xl font-semibold mb-3 md:mb-5">
+        <h3 className="text-lg md:text-xl font-semibold mb-3 md:mb-4">
           {checkInDate ? (
             checkOutDate ? (
               <>
@@ -569,9 +569,9 @@ export default function VehicleAvailabilityCalendar({
         {checkInDate && (
           <>
             {checkOutDate ? (
-              <div className="bg-green-50 p-3 md:p-5 rounded-md">
+              <div className="bg-green-50 p-3 md:p-4 rounded-md">
                 <p className="text-green-800 mb-2 md:mb-3 text-base md:text-lg font-medium">This {vehicleModel} is available for your selected dates!</p>
-                <div className="mt-2 md:mt-4 mb-2 md:mb-3">
+                <div className="mt-2 md:mt-3 mb-2 md:mb-3">
                   <p className="font-medium text-base md:text-lg">Booking Summary:</p>
                   {isLoading ? (
                     <p className="text-gray-700 text-sm md:text-base">Calculating price...</p>
@@ -626,7 +626,7 @@ export default function VehicleAvailabilityCalendar({
                 </button>
               </div>
             ) : (
-              <div className="bg-blue-50 p-3 md:p-5 rounded-md text-sm md:text-base">
+              <div className="bg-blue-50 p-3 md:p-4 rounded-md text-sm md:text-base">
                 <p className="text-blue-800 mb-2 text-base md:text-lg font-medium">Click on another date to complete your selection.</p>
                 
                 {/* Show available discounts preview */}
@@ -650,15 +650,15 @@ export default function VehicleAvailabilityCalendar({
           </>
         )}
 
-        <div className="mt-6 md:mt-8">
-          <h4 className="font-semibold mb-3 text-base md:text-lg">Booking Instructions</h4>
-          <ol className="text-gray-700 mb-4 list-decimal pl-5 space-y-1 md:space-y-2 text-sm md:text-base">
+        <div className="mt-4 md:mt-6">
+          <h4 className="font-semibold mb-2 text-base md:text-lg">Booking Instructions</h4>
+          <ol className="text-gray-700 mb-3 list-decimal pl-5 space-y-1 text-sm md:text-base">
             <li>Select your pickup date first</li>
             <li>Then select your return date</li>
             <li>Review the booking summary</li>
             <li>Click &ldquo;Proceed to Booking&rdquo; to confirm</li>
           </ol>
-          <p className="text-xs md:text-sm text-gray-500 mt-3">
+          <p className="text-xs md:text-sm text-gray-500 mt-2">
             Note: Gray dates are unavailable due to existing bookings. Green prices indicate special event pricing. Longer bookings may qualify for duration discounts.
           </p>
         </div>

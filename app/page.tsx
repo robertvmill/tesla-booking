@@ -50,17 +50,17 @@ export default async function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20">
+    <div className="min-h-screen bg-gray-50 pt-16">
       {/* Booking Search Bar */}
       <BookingSearchBar />
 
       {/* Vehicle Listings */}
-      <div className="container mx-auto px-4 py-16">
-        <h2 className="text-3xl font-bold mb-12 text-center">
+      <div className="container mx-auto px-4 py-8">
+        <h2 className="text-3xl font-bold mb-8 text-center">
           Available Vehicles
         </h2>
         
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {vehicles.map((vehicle) => (
             <VehicleCard
               key={vehicle.id}
@@ -75,27 +75,27 @@ export default async function Home() {
       </div>
 
       {/* Features Section */}
-      <div className="bg-gray-100 py-16">
+      <div className="bg-gray-100 py-12">
         <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold mb-12 text-center">
+          <h2 className="text-3xl font-bold mb-8 text-center">
             Why Choose Our Tesla Rentals
           </h2>
           
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="bg-white p-6 rounded-lg shadow-md">
-              <h3 className="text-xl font-bold mb-3">Premium Experience</h3>
+          <div className="grid md:grid-cols-3 gap-6">
+            <div className="bg-white p-5 rounded-lg shadow-md">
+              <h3 className="text-xl font-bold mb-2">Premium Experience</h3>
               <p className="text-gray-600">
                 Drive the most advanced electric vehicles on the market
               </p>
             </div>
-            <div className="bg-white p-6 rounded-lg shadow-md">
-              <h3 className="text-xl font-bold mb-3">Flexible Booking</h3>
+            <div className="bg-white p-5 rounded-lg shadow-md">
+              <h3 className="text-xl font-bold mb-2">Flexible Booking</h3>
               <p className="text-gray-600">
                 Easy online booking system with flexible scheduling options
               </p>
             </div>
-            <div className="bg-white p-6 rounded-lg shadow-md">
-              <h3 className="text-xl font-bold mb-3">24/7 Support</h3>
+            <div className="bg-white p-5 rounded-lg shadow-md">
+              <h3 className="text-xl font-bold mb-2">24/7 Support</h3>
               <p className="text-gray-600">
                 Customer service available any time you need assistance
               </p>
