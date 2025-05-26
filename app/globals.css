@@ -96,8 +96,8 @@
   box-shadow: 0 2px 8px 0 rgba(0,0,0,0.04);
 }
 
-/* Headings for strong contrast */
-h1, h2, h3, h4, h5, h6 {
+/* Headings for strong contrast - exclude footer headings */
+h1:not(footer h1), h2:not(footer h2), h3:not(footer h3), h4:not(footer h4), h5:not(footer h5), h6:not(footer h6) {
   color: var(--foreground);
   font-weight: bold;
 }

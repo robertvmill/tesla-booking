@@ -2,31 +2,9 @@ import Link from 'next/link';
 import { Facebook, Twitter, Instagram, Linkedin, Mail, Phone } from 'lucide-react';
 
 export default function Footer() {
-  const currentYear = new Date().getFullYear();
-
   return (
     <footer className="bg-gray-900 text-white">
       <div className="container mx-auto px-4">
-        {/* Top section with newsletter */}
-        <div className="py-6 border-b border-gray-800">
-          <div className="flex flex-col md:flex-row justify-between items-center">
-            <div className="mb-4 md:mb-0">
-              <h3 className="text-xl font-bold text-white">Stay updated</h3>
-              <p className="text-gray-400">Get the latest news and updates</p>
-            </div>
-            <div className="flex w-full md:w-1/3">
-              <input
-                type="email"
-                placeholder="Your email"
-                className="w-full px-4 py-2 bg-gray-800 text-white border border-gray-700 rounded-l-md focus:outline-none focus:ring-1 focus:ring-red-500"
-              />
-              <button className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-r-md text-white font-medium transition-colors">
-                Subscribe
-              </button>
-            </div>
-          </div>
-        </div>
-
         {/* Main footer content */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8 py-8">
           <div>
@@ -99,7 +77,7 @@ export default function Footer() {
         
         {/* Copyright section */}
         <div className="py-6 border-t border-gray-800 text-center sm:flex sm:justify-between sm:text-left">
-          <p className="text-gray-400">© {currentYear} Tesla Bookings. All rights reserved.</p>
+          <p className="text-gray-400">© 2025 Tesla Bookings. All rights reserved.</p>
           <div className="mt-4 sm:mt-0">
             <Link href="/privacy" className="text-gray-400 hover:text-white mr-4 transition-colors">Privacy</Link>
             <Link href="/terms" className="text-gray-400 hover:text-white transition-colors">Terms</Link>

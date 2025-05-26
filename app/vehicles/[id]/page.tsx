@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import prisma from "../../lib/prisma";
 import VehicleAvailabilityCalendar from "../../components/vehicles/VehicleAvailabilityCalendar";
 import BookVehicleButton from "../../components/vehicles/BookVehicleButton";
+import VehicleDurationDiscounts from "../../components/vehicles/VehicleDurationDiscounts";
 
 // Mock data to use when database connection fails
 const mockVehicles = {
@@ -125,6 +126,10 @@ export default async function VehicleDetailPage({ params }: VehicleDetailPagePro
                 <div className="bg-gray-100 p-3 rounded-md">
                   <p className="text-sm text-gray-500">Acceleration</p>
                   <p className="text-lg font-bold text-gray-900">{vehicle.acceleration}</p>
+                </div>
+                {/* Duration Discounts Card */}
+                <div className="bg-gray-100 p-3 rounded-md col-span-2">
+                  <VehicleDurationDiscounts vehicleId={vehicle.id} />
                 </div>
               </div>
 

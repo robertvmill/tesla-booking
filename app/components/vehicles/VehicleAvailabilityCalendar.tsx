@@ -21,6 +21,50 @@ interface DailyPrice {
   isSpecialPrice: boolean;
 }
 
+// Define interface for duration discounts
+interface DurationDiscount {
+  id: string;
+  name: string;
+  durationType: '3_days' | 'week' | '2_weeks' | 'month';
+  discountType: 'percentage' | 'fixed_amount';
+  discountValue: number;
+  applyToAll: boolean;
+  isActive: boolean;
+  vehicles: { id: string; model: string }[];
+}
+
+// Helper function to get minimum days for each duration type
+const getDurationMinimumDays = (durationType: string): number => {
+  switch (durationType) {
+    case '3_days':
+      return 3;
+    case 'week':
+      return 7;
+    case '2_weeks':
+      return 14;
+    case 'month':
+      return 30;
+    default:
+      return 0;
+  }
+};
+
+// Helper function to get duration priority (higher number = longer duration = higher priority)
+const getDurationPriority = (durationType: string): number => {
+  switch (durationType) {
+    case 'month':
+      return 4;
+    case '2_weeks':
+      return 3;
+    case 'week':
+      return 2;
+    case '3_days':
+      return 1;
+    default:
+      return 0;
+  }
+};
+
 export default function VehicleAvailabilityCalendar({ 
   vehicleId, 
   bookings, 
@@ -34,6 +78,7 @@ export default function VehicleAvailabilityCalendar({
   const [hoveredDate, setHoveredDate] = useState<Date | null>(null);
   const [dailyPrices, setDailyPrices] = useState<Map<string, DailyPrice>>(new Map());
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [durationDiscounts, setDurationDiscounts] = useState<DurationDiscount[]>([]);
 
   // Function to check if a date is booked
   const isDateBooked = (date: Date) => {
@@ -60,8 +105,8 @@ export default function VehicleAvailabilityCalendar({
     return dailyPrices.has(dateKey) ? dailyPrices.get(dateKey)!.isSpecialPrice : false;
   };
 
-  // Calculate total price
-  const totalPrice = useMemo(() => {
+  // Calculate base price (before discounts)
+  const basePrice = useMemo(() => {
     if (!checkInDate || !checkOutDate) return 0;
     let sum = 0;
     const days = eachDayOfInterval({ start: checkInDate, end: checkOutDate });
@@ -73,6 +118,77 @@ export default function VehicleAvailabilityCalendar({
     
     return sum;
   }, [checkInDate, checkOutDate, dailyPrices]);
+
+  // Calculate duration discount
+  const durationDiscountCalculation = useMemo(() => {
+    if (!checkInDate || !checkOutDate || durationDiscounts.length === 0) {
+      return {
+        discountApplied: false,
+        discountAmount: 0,
+        discountName: '',
+        originalPrice: basePrice,
+        finalPrice: basePrice
+      };
+    }
+
+    const bookingDays = differenceInDays(checkOutDate, checkInDate) + 1;
+    
+    // Filter discounts that apply to this booking duration
+    const applicableDiscounts = durationDiscounts.filter(discount => {
+      const minimumDays = getDurationMinimumDays(discount.durationType);
+      return bookingDays >= minimumDays && discount.isActive;
+    });
+    
+    if (applicableDiscounts.length === 0) {
+      return {
+        discountApplied: false,
+        discountAmount: 0,
+        discountName: '',
+        originalPrice: basePrice,
+        finalPrice: basePrice
+      };
+    }
+    
+    // Sort discounts by priority (longest duration first) and then by discount value (highest first)
+    const sortedDiscounts = applicableDiscounts.sort((a, b) => {
+      const priorityA = getDurationPriority(a.durationType);
+      const priorityB = getDurationPriority(b.durationType);
+      
+      if (priorityA !== priorityB) {
+        return priorityB - priorityA; // Higher priority first
+      }
+      
+      // If same priority, prefer higher discount value
+      return b.discountValue - a.discountValue;
+    });
+    
+    // Apply the best discount
+    const bestDiscount = sortedDiscounts[0];
+    let discountAmount = 0;
+    
+    if (bestDiscount.discountType === 'percentage') {
+      discountAmount = (basePrice * bestDiscount.discountValue) / 100;
+    } else {
+      // Fixed amount discount
+      discountAmount = bestDiscount.discountValue;
+    }
+    
+    // Ensure discount doesn't exceed the base price
+    discountAmount = Math.min(discountAmount, basePrice);
+    
+    const finalPrice = basePrice - discountAmount;
+    
+    return {
+      discountApplied: true,
+      discountAmount,
+      discountName: bestDiscount.name,
+      originalPrice: basePrice,
+      finalPrice
+    };
+  }, [checkInDate, checkOutDate, basePrice, durationDiscounts]);
+
+  // Total price after applying discounts
+  const totalPrice = durationDiscountCalculation.finalPrice;
 
   // Handle date click
   const handleDateClick = (date: Date) => {
@@ -128,6 +244,19 @@ export default function VehicleAvailabilityCalendar({
   const clearDates = () => {
     setCheckInDate(null);
     setCheckOutDate(null);
+  };
+
+  // Fetch duration discounts for this vehicle
+  const fetchDurationDiscounts = async () => {
+    try {
+      const response = await fetch(`/api/admin/duration-discounts?vehicleId=${vehicleId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setDurationDiscounts(data.discounts || []);
+      }
+    } catch (error) {
+      console.error('Error fetching duration discounts:', error);
+    }
   };
 
   // Fetch pricing data for an entire month
@@ -196,13 +325,18 @@ export default function VehicleAvailabilityCalendar({
     }
   };
 
-  // Load pricing data when component mounts or month changes
+  // Load pricing data and duration discounts when component mounts or month changes
   useEffect(() => {
     fetchMonthPricing(currentMonth);
     // Also fetch next month for dual display
     const nextMonth = addMonths(currentMonth, 1);
     fetchMonthPricing(nextMonth);
   }, [currentMonth, vehicleId, pricePerDay]);
+
+  // Fetch duration discounts when component mounts
+  useEffect(() => {
+    fetchDurationDiscounts();
+  }, [vehicleId]);
 
   // Helper function to render calendar days
   const renderCalendarDays = (monthOffset: number = 0) => {
@@ -453,7 +587,30 @@ export default function VehicleAvailabilityCalendar({
                           </div>
                         ))}
                       </div>
-                      <p className="text-base md:text-xl font-bold mt-2 pt-2 border-t">Total: ${totalPrice}</p>
+                      
+                      {/* Duration discount information */}
+                      {durationDiscountCalculation.discountApplied && (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-md p-2 md:p-3 mb-2 md:mb-3">
+                          <p className="text-yellow-800 font-medium text-sm md:text-base">🎉 {durationDiscountCalculation.discountName}</p>
+                          <div className="flex justify-between text-sm text-yellow-700 mt-1">
+                            <span>Subtotal:</span>
+                            <span>${durationDiscountCalculation.originalPrice}</span>
+                          </div>
+                          <div className="flex justify-between text-sm text-yellow-700">
+                            <span>Discount:</span>
+                            <span>-${durationDiscountCalculation.discountAmount}</span>
+                          </div>
+                        </div>
+                      )}
+                      
+                      <p className="text-base md:text-xl font-bold mt-2 pt-2 border-t">
+                        Total: ${totalPrice}
+                        {durationDiscountCalculation.discountApplied && (
+                          <span className="text-sm md:text-base text-green-600 ml-2">
+                            (Save ${durationDiscountCalculation.discountAmount})
+                          </span>
+                        )}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -471,6 +628,23 @@ export default function VehicleAvailabilityCalendar({
             ) : (
               <div className="bg-blue-50 p-3 md:p-5 rounded-md text-sm md:text-base">
                 <p className="text-blue-800 mb-2 text-base md:text-lg font-medium">Click on another date to complete your selection.</p>
+                
+                {/* Show available discounts preview */}
+                {durationDiscounts.length > 0 && (
+                  <div className="mt-3 md:mt-4">
+                    <p className="text-blue-700 font-medium text-sm md:text-base mb-2">Available discounts:</p>
+                    <div className="space-y-1">
+                      {durationDiscounts
+                        .filter(discount => discount.isActive)
+                        .sort((a, b) => getDurationPriority(b.durationType) - getDurationPriority(a.durationType))
+                        .map(discount => (
+                          <div key={discount.id} className="text-xs md:text-sm text-blue-600">
+                            • {discount.name}: {getDurationMinimumDays(discount.durationType)}+ days - {discount.discountType === 'percentage' ? `${discount.discountValue}% off` : `$${discount.discountValue} off`}
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </>
@@ -485,7 +659,7 @@ export default function VehicleAvailabilityCalendar({
             <li>Click &ldquo;Proceed to Booking&rdquo; to confirm</li>
           </ol>
           <p className="text-xs md:text-sm text-gray-500 mt-3">
-            Note: Gray dates are unavailable due to existing bookings. Green prices indicate special event pricing.
+            Note: Gray dates are unavailable due to existing bookings. Green prices indicate special event pricing. Longer bookings may qualify for duration discounts.
           </p>
         </div>
       </div>

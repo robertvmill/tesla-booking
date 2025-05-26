@@ -22,15 +22,22 @@ export async function GET(request: Request) {
     const vehicleId = searchParams.get('vehicleId');
     
     // Build query
-    const query: any = {};
+    let query: any = {};
     
-    // If vehicleId is provided, filter by vehicle
+    // If vehicleId is provided, filter by vehicle OR apply to all
     if (vehicleId) {
-      query.vehicles = {
-        some: {
-          id: vehicleId
+      query.OR = [
+        // Discounts that apply to all vehicles
+        { applyToAll: true },
+        // Discounts that are specifically connected to this vehicle
+        {
+          vehicles: {
+            some: {
+              id: vehicleId
+            }
+          }
         }
-      };
+      ];
     }
     
     // Get all duration discounts

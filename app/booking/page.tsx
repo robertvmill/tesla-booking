@@ -31,6 +31,14 @@ function BookingContent() {
   const [adjustedPricePerDay, setAdjustedPricePerDay] = useState<number>(0);
   // Add daily price breakdown
   const [dailyPrices, setDailyPrices] = useState<Array<{ date: string, price: number }>>([]);
+  // Add duration discount state
+  const [durationDiscount, setDurationDiscount] = useState<{
+    applied: boolean;
+    name?: string;
+    amount: number;
+    originalPrice: number;
+    finalPrice: number;
+  } | null>(null);
 
   const vehicleId = searchParams.get('vehicleId');
   const fromDate = searchParams.get('from');
@@ -63,7 +71,7 @@ function BookingContent() {
       }
     };
 
-    // Fetch availability to get adjusted price
+    // Fetch availability to get adjusted price and duration discounts
     const fetchAvailability = async () => {
       if (!fromDate || !toDate || !vehicleId) return;
       
@@ -80,10 +88,22 @@ function BookingContent() {
           adjustedPricePerDay?: number;
           pricePerDay: number;
           hasSpecialPricing?: boolean;
+          durationDiscount?: {
+            applied: boolean;
+            name?: string;
+            amount: number;
+            originalPrice: number;
+            finalPrice: number;
+          };
         }) => v.id === vehicleId);
         
         if (vehicleData) {
           setAdjustedPricePerDay(vehicleData.adjustedPricePerDay || vehicleData.pricePerDay);
+          
+          // Set duration discount information
+          if (vehicleData.durationDiscount) {
+            setDurationDiscount(vehicleData.durationDiscount);
+          }
           
           // Use the daily prices from the API if available
           if (vehicleData.dailyPrices && vehicleData.dailyPrices.length > 0) {
@@ -129,8 +149,10 @@ function BookingContent() {
 
     setIsLoading(true);
     try {
-      // Calculate total from daily prices
-      const calculatedTotal = dailyPrices.reduce((sum, day) => sum + day.price, 0) || totalPrice;
+      // Use the final price from duration discount if available, otherwise calculate from daily prices
+      const calculatedTotal = durationDiscount?.applied 
+        ? durationDiscount.finalPrice 
+        : (dailyPrices.reduce((sum, day) => sum + day.price, 0) || totalPrice);
       
       // Create a checkout session
       const response = await fetch('/api/create-checkout', {
@@ -147,6 +169,12 @@ function BookingContent() {
           numberOfDays,
           totalAmount: calculatedTotal,
           vehicleModel: vehicle.model,
+          durationDiscount: durationDiscount?.applied ? {
+            name: durationDiscount.name,
+            amount: durationDiscount.amount,
+            originalPrice: durationDiscount.originalPrice,
+            finalPrice: durationDiscount.finalPrice
+          } : undefined,
         }),
       });
 
@@ -191,6 +219,10 @@ function BookingContent() {
   // Use the adjusted price or fall back to regular price
   const displayPrice = adjustedPricePerDay || (vehicle?.pricePerDay || 0);
   const totalPrice = displayPrice * numberOfDays;
+
+  // Calculate final display totals
+  const baseTotal = dailyPrices.reduce((sum, day) => sum + day.price, 0) || totalPrice;
+  const finalTotal = durationDiscount?.applied ? durationDiscount.finalPrice : baseTotal;
 
   if (error) {
     return (
@@ -331,11 +363,33 @@ function BookingContent() {
                     )}
                   </div>
 
+                  {/* Duration Discount Display */}
+                  {durationDiscount?.applied && (
+                    <div className="mb-4 bg-yellow-50 border border-yellow-200 rounded-md p-3">
+                      <h3 className="font-semibold text-yellow-800">🎉 {durationDiscount.name}</h3>
+                      <div className="flex justify-between text-sm text-yellow-700 mt-1">
+                        <span>Subtotal:</span>
+                        <span>${durationDiscount.originalPrice}</span>
+                      </div>
+                      <div className="flex justify-between text-sm text-yellow-700">
+                        <span>Discount:</span>
+                        <span>-${durationDiscount.amount}</span>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Total Price Display */}
                   <div className="border-t border-gray-300 my-4 pt-4">
                     <div className="flex justify-between">
                       <span className="font-semibold">Total</span>
-                      <span className="font-bold text-lg">${dailyPrices.reduce((sum, day) => sum + day.price, 0) || totalPrice}</span>
+                      <span className="font-bold text-lg">
+                        ${finalTotal}
+                        {durationDiscount?.applied && (
+                          <span className="text-sm text-green-600 ml-2">
+                            (Save ${durationDiscount.amount})
+                          </span>
+                        )}
+                      </span>
                     </div>
                   </div>
 

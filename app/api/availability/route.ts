@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/app/lib/prisma';
 import { format, eachDayOfInterval } from 'date-fns';
 import { Vehicle } from '@prisma/client';
+import { calculateDurationDiscount } from '@/app/lib/duration-discounts';
 
 // Define custom types for special pricing with vehicles relationship
 interface SpecialPricingWithVehicles {
@@ -87,8 +88,8 @@ export async function GET(request: Request) {
     // Get all days in the range
     const allDaysInRange = eachDayOfInterval({ start, end });
     
-    // Enhance available vehicles with adjusted prices
-    const enhancedVehicles = availableVehicles.map((vehicle: Vehicle) => {
+    // Enhance available vehicles with adjusted prices and duration discounts
+    const enhancedVehicles = await Promise.all(availableVehicles.map(async (vehicle: Vehicle) => {
       // Default to standard pricing
       let hasSpecialPricing = false;
       let adjustedPricePerDay = vehicle.pricePerDay;
@@ -140,20 +141,41 @@ export async function GET(request: Request) {
         };
       });
       
-      // Calculate total price for the stay
-      const totalPrice = dailyPrices.reduce((sum, day) => sum + day.price, 0);
+      // Calculate total price for the stay (before duration discounts)
+      const basePrice = dailyPrices.reduce((sum, day) => sum + day.price, 0);
+      
+      // Calculate duration discount
+      const durationDiscountResult = await calculateDurationDiscount(
+        vehicle.id,
+        start,
+        end,
+        basePrice
+      );
       
       // Calculate average price per day (for backward compatibility)
-      adjustedPricePerDay = hasSpecialPricing ? Math.round(totalPrice / dailyPrices.length) : vehicle.pricePerDay;
+      adjustedPricePerDay = hasSpecialPricing ? Math.round(basePrice / dailyPrices.length) : vehicle.pricePerDay;
       
       return {
         ...vehicle,
         adjustedPricePerDay,
-        totalPrice,
+        totalPrice: basePrice,
+        finalPrice: durationDiscountResult.finalPrice,
         hasSpecialPricing,
-        dailyPrices
+        dailyPrices,
+        durationDiscount: durationDiscountResult.discountApplied ? {
+          applied: true,
+          name: durationDiscountResult.discountName,
+          amount: durationDiscountResult.discountAmount,
+          originalPrice: durationDiscountResult.originalPrice,
+          finalPrice: durationDiscountResult.finalPrice
+        } : {
+          applied: false,
+          amount: 0,
+          originalPrice: basePrice,
+          finalPrice: basePrice
+        }
       };
-    });
+    }));
 
     return NextResponse.json({ availableVehicles: enhancedVehicles });
   } catch (error) {

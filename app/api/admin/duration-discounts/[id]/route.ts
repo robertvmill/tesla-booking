@@ -10,14 +10,15 @@ async function isAdmin() {
 }
 
 // Update a duration discount
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
+export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     // Check if user is admin
     if (!(await isAdmin())) {
       return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 });
     }
     
-    const { id } = params;
+    const resolvedParams = await params;
+    const { id } = resolvedParams;
     
     // Parse the request body
     const data = await request.json();
@@ -130,14 +131,15 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 }
 
 // Delete a duration discount
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     // Check if user is admin
     if (!(await isAdmin())) {
       return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 });
     }
     
-    const { id } = params;
+    const resolvedParams = await params;
+    const { id } = resolvedParams;
     
     // Check if discount exists
     const existingDiscount = await prisma.durationDiscount.findUnique({
