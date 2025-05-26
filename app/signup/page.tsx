@@ -116,7 +116,7 @@ function SignupContent() {
                 </div>
               </div>
               <h1 className="text-2xl font-bold">Create your account</h1>
-              <p className="text-sm text-muted-foreground">Enter your information to get started with Tesla Bookings</p>
+              <p className="text-sm text-muted-foreground">Enter your information to get started with RideReady</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">

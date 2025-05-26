@@ -102,6 +102,22 @@ export default function Header() {
 
           {/* Right side - Profile and Menu */}
           <div className="flex items-center gap-3">
+            {/* Authentication Buttons - Only show when not authenticated */}
+            {!session?.user && (
+              <div className="hidden sm:flex items-center gap-2">
+                <Link href="/login">
+                  <button className="px-3 py-1.5 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-100 text-sm font-medium">
+                    Login
+                  </button>
+                </Link>
+                <Link href="/signup">
+                  <button className="px-3 py-1.5 rounded-md bg-red-600 text-white hover:bg-red-700 text-sm font-medium">
+                    Sign Up
+                  </button>
+                </Link>
+              </div>
+            )}
+
             {/* Profile Image - Only show when authenticated */}
             {session?.user && (
               <div className="flex items-center gap-2">

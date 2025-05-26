@@ -10,7 +10,7 @@ export default function AboutPage() {
       {/* Main content container with padding */}
       <div className="container mx-auto px-4 py-12">
         {/* Page title */}
-        <h1 className="text-4xl font-bold text-center mb-8">About Tesla Bookings</h1>
+        <h1 className="text-4xl font-bold text-center mb-8">About RideReady</h1>
         
         {/* Hero image container */}
         <div className="relative max-w-4xl mx-auto h-96 mb-12">
@@ -31,7 +31,7 @@ export default function AboutPage() {
             
             {/* Introduction paragraph */}
             <p className="text-lg mb-6">
-              Welcome to Tesla Bookings, Toronto&apos;s premier Tesla rental service. We offer a fleet of high-performance, 
+              Welcome to RideReady, Toronto&apos;s premier Tesla rental service. We offer a fleet of high-performance, 
               all-electric Tesla vehicles available for both short and long-term rentals.
             </p>
             

@@ -12,7 +12,7 @@ export default function Footer() {
               <svg className="h-8 w-8 text-red-600 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
-              <h3 className="text-xl font-bold text-white">Tesla Bookings</h3>
+              <h3 className="text-xl font-bold text-white">RideReady</h3>
             </div>
             <p className="text-gray-400 mb-4">
               Experience the future of driving with our premium Tesla fleet.
@@ -77,7 +77,7 @@ export default function Footer() {
         
         {/* Copyright section */}
         <div className="py-6 border-t border-gray-800 text-center sm:flex sm:justify-between sm:text-left">
-          <p className="text-gray-400">© 2025 Tesla Bookings. All rights reserved.</p>
+          <p className="text-gray-400">© 2025 RideReady. All rights reserved.</p>
           <div className="mt-4 sm:mt-0">
             <Link href="/privacy" className="text-gray-400 hover:text-white mr-4 transition-colors">Privacy</Link>
             <Link href="/terms" className="text-gray-400 hover:text-white transition-colors">Terms</Link>
