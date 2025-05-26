@@ -30,13 +30,31 @@ export async function GET() {
     let count = 0;
 
     if (user.isAdmin) {
-      // For admin users: count all unread user messages across all bookings
-      count = await prisma.message.count({
+      // For admin users: count unread user messages across all bookings
+      const userMessagesCount = await prisma.message.count({
         where: {
           isAdminMessage: false, // Messages from users
           isRead: false,
         },
       });
+      
+      // Also count unread admin messages in their own bookings (when admin makes a booking)
+      const adminOwnBookings = await prisma.booking.findMany({
+        where: { userId: user.id },
+        select: { id: true },
+      });
+      
+      const adminOwnBookingIds = adminOwnBookings.map(booking => booking.id);
+      
+      const adminOwnMessagesCount = await prisma.message.count({
+        where: {
+          bookingId: { in: adminOwnBookingIds },
+          isAdminMessage: true,
+          isRead: false,
+        },
+      });
+      
+      count = userMessagesCount + adminOwnMessagesCount;
     } else {
       // For regular users: count unread admin messages in their bookings
       // Get all bookings for the user

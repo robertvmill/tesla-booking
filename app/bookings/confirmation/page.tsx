@@ -32,7 +32,18 @@ function ConfirmationContent() {
         
         // Trigger a refresh of unread messages count and inbox
         if (typeof window !== 'undefined') {
+          // Immediate refresh
           window.dispatchEvent(new Event('refreshUnreadCount'));
+          
+          // Additional refresh after a delay to account for webhook processing
+          setTimeout(() => {
+            window.dispatchEvent(new Event('refreshUnreadCount'));
+          }, 2000);
+          
+          // One more refresh after a longer delay as a fallback
+          setTimeout(() => {
+            window.dispatchEvent(new Event('refreshUnreadCount'));
+          }, 5000);
         }
       } catch (err) {
         console.error(err);
@@ -149,8 +160,8 @@ function ConfirmationContent() {
           </div>
           
           <div className="mt-8 text-center">
-            <Link href="/bookings" className="bg-red-600 hover:bg-red-700 text-white py-2 px-6 rounded-md">
-              View All Bookings
+            <Link href={`/bookings/${booking.id}`} className="bg-red-600 hover:bg-red-700 text-white py-2 px-6 rounded-md">
+              Go to Booking
             </Link>
           </div>
         </div>

@@ -33,13 +33,12 @@ export async function POST(request: Request) {
       // Update the booking status to confirmed
       if (session.metadata?.bookingId) {
         const bookingId = session.metadata.bookingId;
-        const userId = session.metadata.userId;
-        console.log(`Webhook: Processing booking ${bookingId} for user ${userId}`);
+        console.log(`Webhook: Processing booking ${bookingId}`);
         
         // First, get the booking with vehicle details
         const booking = await prisma.booking.findUnique({
           where: { id: bookingId },
-          include: { vehicle: true }
+          include: { vehicle: true, user: true }
         });
         
         if (booking) {
@@ -59,13 +58,14 @@ export async function POST(request: Request) {
           const endDate = new Date(booking.endDate);
           const days = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
           
-          // Create welcome message from admin
+          // Create welcome message from admin (unread for the user)
           const message = await prisma.message.create({
             data: {
               content: `Thank you for choosing RideReady! We're thrilled you'll be experiencing our ${booking.vehicle.model}. Your reservation for ${days} days has been confirmed. If you have any questions before your trip, feel free to message us here. We look forward to getting you on the road in style!`,
               bookingId: bookingId,
-              userId: userId,
-              isAdminMessage: true
+              userId: booking.userId, // Use the booking's userId instead of metadata
+              isAdminMessage: true,
+              isRead: false // Ensure it's marked as unread for the user
             }
           });
           console.log(`Webhook: Created welcome message ${message.id}`);

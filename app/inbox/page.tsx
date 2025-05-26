@@ -233,17 +233,26 @@ export default function InboxPage() {
                 className="block"
               >
                 <Card 
-                  className={`hover:shadow-md transition-shadow ${conversationHasUnread ? 'border-l-4 border-l-red-500' : ''} cursor-pointer`}
+                  className={`hover:shadow-md transition-all duration-200 cursor-pointer ${
+                    conversationHasUnread 
+                      ? 'border-l-4 border-l-red-500 bg-red-50/30 shadow-sm' 
+                      : 'border-l-4 border-l-transparent hover:border-l-gray-200'
+                  }`}
                 >
                   {/* Booking header with vehicle and date information */}
-                  <CardHeader>
+                  <CardHeader className={conversationHasUnread ? 'bg-white/80' : ''}>
                     <div className="flex justify-between items-start">
                       <div className="flex items-center">
                         {conversationHasUnread && (
-                          <CircleDot className="h-4 w-4 text-red-500 mr-2 flex-shrink-0" />
+                          <div className="flex items-center mr-3">
+                            <CircleDot className="h-3 w-3 text-red-500 mr-1 flex-shrink-0 animate-pulse" />
+                            <span className="text-xs font-semibold text-red-600 bg-red-100 px-2 py-1 rounded-full">
+                              UNREAD
+                            </span>
+                          </div>
                         )}
                         <div>
-                          <CardTitle className="text-lg">
+                          <CardTitle className={`text-lg ${conversationHasUnread ? 'text-gray-900 font-semibold' : 'text-gray-700'}`}>
                             {booking.vehicle.model}
                             {isAdmin && booking.user && (
                               <span className="ml-2 text-sm font-normal text-gray-500">
@@ -251,51 +260,68 @@ export default function InboxPage() {
                               </span>
                             )}
                           </CardTitle>
-                          <CardDescription>
+                          <CardDescription className={conversationHasUnread ? 'text-gray-600' : 'text-gray-500'}>
                             {format(new Date(booking.startDate), 'MMM d')} - {format(new Date(booking.endDate), 'MMM d, yyyy')}
                           </CardDescription>
                         </div>
                       </div>
-                      <Button variant="outline" size="sm" className="flex items-center gap-1">
+                      <Button 
+                        variant={conversationHasUnread ? "default" : "outline"} 
+                        size="sm" 
+                        className={`flex items-center gap-1 ${
+                          conversationHasUnread 
+                            ? 'bg-red-600 hover:bg-red-700 text-white' 
+                            : ''
+                        }`}
+                      >
                         View Conversation
                         <ArrowRightIcon className="h-4 w-4" />
                       </Button>
                     </div>
                   </CardHeader>
                   {/* Latest message preview */}
-                  <CardContent>
+                  <CardContent className={conversationHasUnread ? 'bg-white/80' : ''}>
                     <div className="flex items-start gap-3">
-                      <div className={`rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0 ${
+                      <div className={`rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0 text-sm font-medium ${
                         (latestMessage.isAdminMessage && !latestMessage.isRead && !isAdmin) || 
                         (!latestMessage.isAdminMessage && !latestMessage.isRead && isAdmin)
-                          ? 'bg-red-100 text-red-600'
-                          : 'bg-gray-100'
+                          ? 'bg-red-500 text-white shadow-md'
+                          : 'bg-gray-200 text-gray-600'
                       }`}>
                         {latestMessage.isAdminMessage ? 'R' : (isAdmin ? latestMessage.user.name?.charAt(0) || 'U' : 'Y')}
                       </div>
                       <div className="flex-1">
                         <div className="flex justify-between items-center mb-1">
-                          <p className={`font-medium text-sm ${
-                            (latestMessage.isAdminMessage && !latestMessage.isRead && !isAdmin) || 
-                            (!latestMessage.isAdminMessage && !latestMessage.isRead && isAdmin)
-                              ? 'text-red-600'
-                              : ''
-                          }`}>
-                            {latestMessage.isAdminMessage ? 'RideReady Support' : (isAdmin ? (latestMessage.user.name || latestMessage.user.email) : 'You')}
+                          <div className="flex items-center">
+                            <p className={`font-medium text-sm ${
+                              (latestMessage.isAdminMessage && !latestMessage.isRead && !isAdmin) || 
+                              (!latestMessage.isAdminMessage && !latestMessage.isRead && isAdmin)
+                                ? 'text-red-700 font-semibold'
+                                : 'text-gray-700'
+                            }`}>
+                              {latestMessage.isAdminMessage ? 'RideReady Support' : (isAdmin ? (latestMessage.user.name || latestMessage.user.email) : 'You')}
+                            </p>
                             {((latestMessage.isAdminMessage && !latestMessage.isRead && !isAdmin) || 
                              (!latestMessage.isAdminMessage && !latestMessage.isRead && isAdmin)) && (
-                              <span className="ml-2 text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">New</span>
+                              <span className="ml-2 text-xs bg-red-500 text-white px-2 py-0.5 rounded-full font-medium shadow-sm">
+                                NEW
+                              </span>
                             )}
-                          </p>
-                          <p className="text-xs text-gray-500">
+                          </div>
+                          <p className={`text-xs ${
+                            (latestMessage.isAdminMessage && !latestMessage.isRead && !isAdmin) || 
+                            (!latestMessage.isAdminMessage && !latestMessage.isRead && isAdmin)
+                              ? 'text-red-600 font-medium'
+                              : 'text-gray-500'
+                          }`}>
                             {formatDate(latestMessage.createdAt)}
                           </p>
                         </div>
                         <p className={`line-clamp-2 ${
                           (latestMessage.isAdminMessage && !latestMessage.isRead && !isAdmin) ||
                           (!latestMessage.isAdminMessage && !latestMessage.isRead && isAdmin)
-                            ? 'font-medium text-gray-900'
-                            : 'text-gray-700'
+                            ? 'font-semibold text-gray-900'
+                            : 'text-gray-600'
                         }`}>
                           {latestMessage.content}
                         </p>
@@ -304,8 +330,19 @@ export default function InboxPage() {
                     
                     {/* Show message count if there are multiple messages */}
                     {messages.length > 1 && (
-                      <div className="mt-3 text-sm text-gray-500">
-                        {messages.length} messages in this conversation
+                      <div className={`mt-3 text-sm flex items-center justify-between ${
+                        conversationHasUnread ? 'text-gray-700' : 'text-gray-500'
+                      }`}>
+                        <span>{messages.length} messages in this conversation</span>
+                        {conversationHasUnread && (
+                          <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full font-medium">
+                            {messages.filter(msg => 
+                              isAdmin 
+                                ? !msg.isAdminMessage && !msg.isRead 
+                                : msg.isAdminMessage && !msg.isRead
+                            ).length} unread
+                          </span>
+                        )}
                       </div>
                     )}
                   </CardContent>

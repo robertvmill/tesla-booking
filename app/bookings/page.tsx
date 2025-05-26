@@ -58,7 +58,9 @@ export default function BookingsPage() {
       }
       
       const data = await response.json();
-      setBookings(data.bookings);
+      // Filter out pending bookings
+      const filteredBookings = data.bookings.filter((booking: Booking) => booking.status.toLowerCase() !== 'pending');
+      setBookings(filteredBookings);
     } catch (err) {
       console.error('Error fetching bookings:', err);
       setError('Failed to load your bookings. Please try again later.');

@@ -5,8 +5,8 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { format } from 'date-fns';
-import { CalendarIcon, CarIcon, ClockIcon, CreditCardIcon, ArrowLeftIcon } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
+import { CalendarIcon, ClockIcon, CreditCardIcon, ArrowLeftIcon } from 'lucide-react';
+import { Card, CardContent, CardHeader } from '@/app/components/ui/card';
 import { Skeleton } from '@/app/components/ui/skeleton';
 import { ChatInterface } from '@/app/components/ui/ChatInterface';
 
@@ -83,27 +83,13 @@ export default function BookingDetailsPage({ params }: { params: { id: string } 
     return diffDays;
   };
 
-  // Get status badge color
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'confirmed':
-        return 'bg-green-100 text-green-800';
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'cancelled':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
   if (status === 'loading' || isLoading) {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="mb-4">
-          <Link href="/bookings" className="flex items-center text-gray-600 hover:text-gray-900">
+          <Link href="/inbox" className="flex items-center text-gray-600 hover:text-gray-900">
             <ArrowLeftIcon className="mr-2 h-4 w-4" />
-            Back to My Bookings
+            All Messages
           </Link>
         </div>
         
@@ -133,9 +119,9 @@ export default function BookingDetailsPage({ params }: { params: { id: string } 
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="mb-4">
-          <Link href="/bookings" className="flex items-center text-gray-600 hover:text-gray-900">
+          <Link href="/inbox" className="flex items-center text-gray-600 hover:text-gray-900">
             <ArrowLeftIcon className="mr-2 h-4 w-4" />
-            Back to My Bookings
+            All Messages
           </Link>
         </div>
         
@@ -152,9 +138,9 @@ export default function BookingDetailsPage({ params }: { params: { id: string } 
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="mb-4">
-          <Link href="/bookings" className="flex items-center text-gray-600 hover:text-gray-900">
+          <Link href="/inbox" className="flex items-center text-gray-600 hover:text-gray-900">
             <ArrowLeftIcon className="mr-2 h-4 w-4" />
-            Back to My Bookings
+            All Messages
           </Link>
         </div>
         
@@ -170,52 +156,41 @@ export default function BookingDetailsPage({ params }: { params: { id: string } 
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-4">
-        <Link href="/bookings" className="flex items-center text-gray-600 hover:text-gray-900">
+        <Link href="/inbox" className="flex items-center text-gray-600 hover:text-gray-900">
           <ArrowLeftIcon className="mr-2 h-4 w-4" />
-          Back to My Bookings
+          All Messages
         </Link>
       </div>
       
       <div className="max-w-4xl mx-auto">
-        <Card className="mb-4">
-          <CardHeader className="pb-2">
-            <div className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(booking.status)} mb-1`}>
-              {booking.status}
-            </div>
-            <CardTitle className="text-xl">{booking.vehicle.model}</CardTitle>
-            <CardDescription>Booking Reference: {booking.id.substring(0, 8)}</CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="flex flex-col md:flex-row">
-              <div className="md:w-1/2 md:pr-2 mb-4 md:mb-0">
-                <div className="space-y-2">
-                  <div className="flex items-center text-sm">
-                    <CalendarIcon className="mr-2 h-3 w-3 opacity-70" />
-                    <span>
-                      {formatDate(booking.startDate)} - {formatDate(booking.endDate)}
-                    </span>
+        <Card className="mb-6">
+          <CardContent className="p-4">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between">
+              <div className="flex-1 mb-3 md:mb-0">
+                <h1 className="text-lg font-semibold mb-1">{booking.vehicle.model}</h1>
+                <p className="text-sm text-gray-600 mb-2">Booking Reference: {booking.id.substring(0, 8)}</p>
+                <div className="flex flex-wrap gap-4 text-sm text-gray-600">
+                  <div className="flex items-center">
+                    <CalendarIcon className="mr-1 h-3 w-3" />
+                    <span>{formatDate(booking.startDate)} - {formatDate(booking.endDate)}</span>
                   </div>
-                  <div className="flex items-center text-sm">
-                    <ClockIcon className="mr-2 h-3 w-3 opacity-70" />
+                  <div className="flex items-center">
+                    <ClockIcon className="mr-1 h-3 w-3" />
                     <span>{calculateDuration(booking.startDate, booking.endDate)} days</span>
                   </div>
-                  <div className="flex items-center text-sm">
-                    <CreditCardIcon className="mr-2 h-3 w-3 opacity-70" />
+                  <div className="flex items-center">
+                    <CreditCardIcon className="mr-1 h-3 w-3" />
                     <span>${booking.totalPrice.toFixed(2)}</span>
-                  </div>
-                  <div className="flex items-center text-sm">
-                    <CarIcon className="mr-2 h-3 w-3 opacity-70" />
-                    <span>{booking.vehicle.description}</span>
                   </div>
                 </div>
               </div>
               
               {booking.vehicle.image && (
-                <div className="md:w-1/2 md:pl-2">
+                <div className="md:w-32 md:h-20 w-full h-24">
                   <img 
                     src={booking.vehicle.image} 
                     alt={booking.vehicle.model} 
-                    className="rounded-lg w-full object-cover max-h-40"
+                    className="rounded-lg w-full h-full object-cover"
                   />
                 </div>
               )}
@@ -224,7 +199,7 @@ export default function BookingDetailsPage({ params }: { params: { id: string } 
         </Card>
         
         <div>
-          <h2 className="text-xl font-semibold mb-2">Communication</h2>
+          <h2 className="text-xl font-semibold mb-4">Communication</h2>
           <ChatInterface bookingId={booking.id} />
         </div>
       </div>

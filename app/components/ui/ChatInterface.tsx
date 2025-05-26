@@ -25,12 +25,23 @@ interface ChatInterfaceProps {
   bookingId: string;
 }
 
+interface SessionUser {
+  id?: string;
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+  isAdmin?: boolean;
+}
+
 export function ChatInterface({ bookingId }: ChatInterfaceProps) {
   const { data: session } = useSession();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  
+  // Get user admin status safely
+  const isAdmin = session?.user ? (session.user as SessionUser).isAdmin : false;
   
   // Scroll to bottom of messages
   const scrollToBottom = () => {
@@ -52,7 +63,7 @@ export function ChatInterface({ bookingId }: ChatInterfaceProps) {
         const unreadMessages = data.messages.filter(
           (message: Message) => 
             !message.isRead && 
-            message.isAdminMessage !== !!session?.user?.isAdmin // Only mark messages from the other party as read
+            message.isAdminMessage !== isAdmin // Only mark messages from the other party as read
         );
         
         if (unreadMessages.length > 0) {
@@ -81,14 +92,13 @@ export function ChatInterface({ bookingId }: ChatInterfaceProps) {
       });
       
       // Update the unread count in the header by triggering a refetch
-      const event = new CustomEvent('refreshUnreadCount');
-      window.dispatchEvent(event);
+      window.dispatchEvent(new Event('refreshUnreadCount'));
       
       // Update local state to reflect messages as read
       setMessages(prevMessages => 
         prevMessages.map(msg => ({
           ...msg,
-          isRead: msg.isAdminMessage !== !!session?.user?.isAdmin ? true : msg.isRead
+          isRead: msg.isAdminMessage !== isAdmin ? true : msg.isRead
         }))
       );
     } catch (error) {
@@ -132,8 +142,7 @@ export function ChatInterface({ bookingId }: ChatInterfaceProps) {
         setNewMessage('');
         
         // Trigger refresh of unread count for other users
-        const event = new CustomEvent('refreshUnreadCount');
-        window.dispatchEvent(event);
+        window.dispatchEvent(new Event('refreshUnreadCount'));
       }
     } catch (error) {
       console.error('Error sending message:', error);
@@ -158,7 +167,7 @@ export function ChatInterface({ bookingId }: ChatInterfaceProps) {
       <div className="p-3 border-b bg-gray-50 flex-shrink-0">
         <h3 className="font-medium">Booking Communication</h3>
         <p className="text-sm text-gray-500">
-          Chat with {session?.user?.isAdmin ? 'the customer' : 'RideReady support'} about this booking
+          Chat with {isAdmin ? 'the customer' : 'RideReady support'} about this booking
         </p>
       </div>
       

@@ -142,11 +142,17 @@ export default function Header() {
 
             {/* Hamburger Menu Button */}
             <button
-              className="p-2 rounded-md text-gray-700 hover:text-black hover:bg-gray-100"
+              className="p-2 rounded-md text-gray-700 hover:text-black hover:bg-gray-100 relative"
               onClick={() => setMenuOpen(!menuOpen)}
               aria-label="Toggle menu"
             >
               {menuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+              {/* Notification badge for unread messages */}
+              {session?.user && unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
             </button>
           </div>
         </div>
